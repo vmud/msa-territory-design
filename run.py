@@ -85,6 +85,27 @@ def setup_parser() -> argparse.ArgumentParser:
         help='Show progress without running'
     )
 
+    # Proxy options (Oxylabs integration)
+    proxy_group = parser.add_argument_group('proxy options', 'Oxylabs proxy integration')
+    proxy_group.add_argument(
+        '--proxy',
+        type=str,
+        choices=['direct', 'residential', 'web_scraper_api'],
+        default=None,
+        help='Proxy mode: direct (no proxy), residential (Oxylabs IPs), web_scraper_api (managed service)'
+    )
+    proxy_group.add_argument(
+        '--render-js',
+        action='store_true',
+        help='Enable JavaScript rendering (web_scraper_api mode only)'
+    )
+    proxy_group.add_argument(
+        '--proxy-country',
+        type=str,
+        default='us',
+        help='Proxy country code for geo-targeting (default: us)'
+    )
+
     # Logging
     parser.add_argument(
         '--log-file',
@@ -253,6 +274,44 @@ def main():
         retailers = [args.retailer] if args.retailer else None
         show_status(retailers)
         return 0
+
+    # Initialize proxy client if specified via CLI
+    if args.proxy:
+        from src.shared import init_proxy_from_yaml, get_proxy_client, ProxyConfig, ProxyMode
+        import os
+
+        # Check for credentials
+        if args.proxy != 'direct':
+            if not os.getenv('OXYLABS_USERNAME') or not os.getenv('OXYLABS_PASSWORD'):
+                print("Error: OXYLABS_USERNAME and OXYLABS_PASSWORD environment variables required")
+                print("Set them with: export OXYLABS_USERNAME=your_username")
+                print("              export OXYLABS_PASSWORD=your_password")
+                return 1
+
+        # Build proxy config from CLI args
+        mode_map = {
+            'direct': ProxyMode.DIRECT,
+            'residential': ProxyMode.RESIDENTIAL,
+            'web_scraper_api': ProxyMode.WEB_SCRAPER_API,
+        }
+
+        proxy_config = {
+            'mode': args.proxy,
+            'country_code': args.proxy_country,
+            'render_js': args.render_js,
+        }
+
+        client = get_proxy_client(proxy_config)
+        logging.info(f"Proxy mode: {args.proxy} (country: {args.proxy_country})")
+        if args.render_js:
+            logging.info("JavaScript rendering enabled")
+    else:
+        # Try to load from YAML config
+        try:
+            from src.shared import init_proxy_from_yaml
+            init_proxy_from_yaml()
+        except Exception as e:
+            logging.debug(f"Using default proxy config: {e}")
 
     # Get retailers to run
     retailers = get_retailers_to_run(args)

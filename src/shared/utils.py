@@ -9,9 +9,12 @@ import tempfile
 import shutil
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 
 import requests
+
+# Import proxy client for Oxylabs integration
+from src.shared.proxy_client import ProxyClient, ProxyConfig, ProxyMode, ProxyResponse
 
 
 # Default configuration values (can be overridden per-retailer)
@@ -28,6 +31,9 @@ DEFAULT_USER_AGENTS = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0",
 ]
+
+# Global proxy client instance (lazy initialized)
+_proxy_client: Optional[ProxyClient] = None
 
 
 def setup_logging(log_file: str = "logs/scraper.log") -> None:
@@ -247,3 +253,241 @@ def save_to_json(stores: List[Dict[str, Any]], filepath: str) -> None:
         json.dump(stores, f, indent=2, ensure_ascii=False)
 
     logging.info(f"Saved {len(stores)} stores to JSON: {filepath}")
+
+
+# =============================================================================
+# OXYLABS PROXY INTEGRATION
+# =============================================================================
+
+def get_proxy_client(config: Optional[Dict[str, Any]] = None) -> ProxyClient:
+    """
+    Get or create a proxy client instance.
+
+    Args:
+        config: Optional proxy configuration dictionary. If None, loads from
+                environment variables.
+
+    Returns:
+        Configured ProxyClient instance
+    """
+    global _proxy_client
+
+    if config is not None:
+        # Create new client with provided config
+        proxy_config = ProxyConfig.from_dict(config)
+        return ProxyClient(proxy_config)
+
+    if _proxy_client is None:
+        # Create default client from environment
+        _proxy_client = ProxyClient(ProxyConfig.from_env())
+
+    return _proxy_client
+
+
+def init_proxy_from_yaml(yaml_path: str = "config/retailers.yaml") -> ProxyClient:
+    """
+    Initialize proxy client from retailers.yaml configuration.
+
+    Args:
+        yaml_path: Path to retailers.yaml file
+
+    Returns:
+        Configured ProxyClient instance
+    """
+    global _proxy_client
+
+    try:
+        import yaml
+        with open(yaml_path, 'r') as f:
+            config = yaml.safe_load(f)
+
+        proxy_config = config.get('proxy', {})
+        mode = proxy_config.get('mode', 'direct')
+
+        # Build config dict from YAML structure
+        config_dict = {
+            'mode': mode,
+            'timeout': proxy_config.get('timeout', 60),
+            'max_retries': proxy_config.get('max_retries', 3),
+            'retry_delay': proxy_config.get('retry_delay', 2.0),
+        }
+
+        # Add mode-specific settings
+        if mode == 'residential':
+            res_config = proxy_config.get('residential', {})
+            config_dict.update({
+                'residential_endpoint': res_config.get('endpoint', 'pr.oxylabs.io:7777'),
+                'country_code': res_config.get('country_code', 'us'),
+                'session_type': res_config.get('session_type', 'rotating'),
+            })
+        elif mode == 'web_scraper_api':
+            api_config = proxy_config.get('web_scraper_api', {})
+            config_dict.update({
+                'scraper_api_endpoint': api_config.get('endpoint', 'https://realtime.oxylabs.io/v1/queries'),
+                'render_js': api_config.get('render_js', False),
+                'parse': api_config.get('parse', False),
+            })
+
+        _proxy_client = get_proxy_client(config_dict)
+        logging.info(f"Initialized proxy client from {yaml_path} in {mode} mode")
+        return _proxy_client
+
+    except FileNotFoundError:
+        logging.warning(f"Config file {yaml_path} not found, using environment config")
+        return get_proxy_client()
+    except Exception as e:
+        logging.warning(f"Error loading proxy config from {yaml_path}: {e}, using environment config")
+        return get_proxy_client()
+
+
+def get_with_proxy(
+    url: str,
+    proxy_config: Optional[Dict[str, Any]] = None,
+    render_js: Optional[bool] = None,
+    timeout: Optional[int] = None,
+    headers: Optional[Dict[str, str]] = None,
+) -> Optional[Union[requests.Response, ProxyResponse]]:
+    """
+    Fetch URL using proxy client (Oxylabs integration).
+
+    This is the recommended function for new code. It automatically handles:
+    - Proxy rotation (residential mode)
+    - JavaScript rendering (web_scraper_api mode)
+    - Retries and rate limiting
+    - CAPTCHA bypass (via Oxylabs)
+
+    Args:
+        url: URL to fetch
+        proxy_config: Optional per-request proxy config override
+        render_js: Override JS rendering (for web_scraper_api mode)
+        timeout: Request timeout in seconds
+        headers: Optional custom headers
+
+    Returns:
+        ProxyResponse object or None on failure
+    """
+    client = get_proxy_client(proxy_config)
+    return client.get(url, headers=headers, render_js=render_js, timeout=timeout)
+
+
+def create_proxied_session(
+    retailer_config: Optional[Dict[str, Any]] = None
+) -> Union[requests.Session, ProxyClient]:
+    """
+    Create a session-like object that can be used as a drop-in replacement
+    for requests.Session in existing scrapers.
+
+    For direct mode, returns a standard requests.Session.
+    For proxy modes, returns a ProxyClient with compatible interface.
+
+    Args:
+        retailer_config: Optional retailer-specific config with proxy overrides
+
+    Returns:
+        Session-compatible object
+    """
+    # Check for retailer-specific proxy override
+    proxy_config = None
+    if retailer_config and 'proxy' in retailer_config:
+        proxy_config = retailer_config['proxy']
+
+    # Get global proxy config
+    client = get_proxy_client(proxy_config)
+
+    if client.config.mode == ProxyMode.DIRECT:
+        # Return standard session for backward compatibility
+        session = requests.Session()
+        session.headers.update(get_headers())
+        return session
+
+    # Return proxy client (has compatible .get() method)
+    return client
+
+
+def close_proxy_client() -> None:
+    """Close the global proxy client and release resources."""
+    global _proxy_client
+    if _proxy_client is not None:
+        _proxy_client.close()
+        _proxy_client = None
+        logging.info("Proxy client closed")
+
+
+class ProxiedSession:
+    """
+    A wrapper that provides requests.Session-like interface but uses
+    ProxyClient under the hood. This allows existing scrapers to work
+    with minimal changes.
+
+    Usage:
+        # Instead of: session = requests.Session()
+        session = ProxiedSession(proxy_config)
+        response = session.get(url)  # Uses proxy if configured
+    """
+
+    def __init__(self, proxy_config: Optional[Dict[str, Any]] = None):
+        """
+        Initialize proxied session.
+
+        Args:
+            proxy_config: Optional proxy configuration dict
+        """
+        self._client = get_proxy_client(proxy_config)
+        self._direct_session: Optional[requests.Session] = None
+        self.headers: Dict[str, str] = get_headers()
+
+    @property
+    def _session(self) -> requests.Session:
+        """Lazy-create direct session if needed"""
+        if self._direct_session is None:
+            self._direct_session = requests.Session()
+            self._direct_session.headers.update(self.headers)
+        return self._direct_session
+
+    def get(
+        self,
+        url: str,
+        params: Optional[Dict[str, str]] = None,
+        headers: Optional[Dict[str, str]] = None,
+        timeout: Optional[int] = None,
+        **kwargs
+    ) -> Optional[Union[requests.Response, ProxyResponse]]:
+        """
+        Make GET request using configured proxy mode.
+
+        Args:
+            url: URL to fetch
+            params: Query parameters
+            headers: Custom headers
+            timeout: Request timeout
+            **kwargs: Additional arguments (passed to underlying client)
+
+        Returns:
+            Response object or None on failure
+        """
+        merged_headers = {**self.headers, **(headers or {})}
+
+        if self._client.config.mode == ProxyMode.DIRECT:
+            # Use standard session for direct mode
+            try:
+                self._session.headers.update(merged_headers)
+                response = self._session.get(url, params=params, timeout=timeout or 30, **kwargs)
+                return response
+            except requests.exceptions.RequestException as e:
+                logging.warning(f"Request error: {e}")
+                return None
+        else:
+            # Use proxy client
+            return self._client.get(url, params=params, headers=merged_headers, timeout=timeout)
+
+    def close(self) -> None:
+        """Close the session"""
+        if self._direct_session:
+            self._direct_session.close()
+            self._direct_session = None
+
+    def __enter__(self) -> "ProxiedSession":
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()

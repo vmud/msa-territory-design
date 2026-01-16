@@ -11,10 +11,17 @@ services:
     environment:
       - LOG_LEVEL=INFO
       - PYTHONUNBUFFERED=1
+      # Oxylabs proxy credentials (optional)
+      # Set these for proxy mode, or use --proxy direct for no proxy
+      - OXYLABS_USERNAME=${OXYLABS_USERNAME:-}
+      - OXYLABS_PASSWORD=${OXYLABS_PASSWORD:-}
+      # Proxy mode: direct, residential, web_scraper_api
+      - PROXY_MODE=${PROXY_MODE:-direct}
     restart: unless-stopped
     # Override command for different modes:
     # docker-compose run scraper python run.py --retailer verizon
     # docker-compose run scraper python run.py --all --test --limit 10
+    # docker-compose run scraper python run.py --all --proxy residential
 
   # Dashboard service for monitoring
   dashboard:

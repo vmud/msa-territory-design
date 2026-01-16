@@ -15,9 +15,25 @@ from .utils import (
     DEFAULT_TIMEOUT,
     DEFAULT_RATE_LIMIT_BASE_WAIT,
     DEFAULT_USER_AGENTS,
+    # Oxylabs proxy integration
+    get_proxy_client,
+    get_with_proxy,
+    init_proxy_from_yaml,
+    create_proxied_session,
+    close_proxy_client,
+    ProxiedSession,
+)
+
+from .proxy_client import (
+    ProxyClient,
+    ProxyConfig,
+    ProxyMode,
+    ProxyResponse,
+    create_proxy_client,
 )
 
 __all__ = [
+    # Core utilities
     'setup_logging',
     'random_delay',
     'get_with_retry',
@@ -32,4 +48,16 @@ __all__ = [
     'DEFAULT_TIMEOUT',
     'DEFAULT_RATE_LIMIT_BASE_WAIT',
     'DEFAULT_USER_AGENTS',
+    # Oxylabs proxy integration
+    'ProxyClient',
+    'ProxyConfig',
+    'ProxyMode',
+    'ProxyResponse',
+    'create_proxy_client',
+    'get_proxy_client',
+    'get_with_proxy',
+    'init_proxy_from_yaml',
+    'create_proxied_session',
+    'close_proxy_client',
+    'ProxiedSession',
 ]

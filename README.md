@@ -174,12 +174,65 @@ Each retailer has configurable anti-blocking measures:
 - `pause_200_requests`: Longer pause after 200 requests
 - User-agent rotation (4 different browsers)
 
+### Oxylabs Proxy Integration (Optional)
+
+For faster scraping with reduced blocking risk, integrate with [Oxylabs](https://oxylabs.io/) proxy services.
+
+#### Setup
+
+1. Sign up at [Oxylabs](https://oxylabs.io/) and get your credentials
+2. Set environment variables:
+   ```bash
+   export OXYLABS_USERNAME=your_username
+   export OXYLABS_PASSWORD=your_password
+   ```
+
+3. Or create a `.env` file (copy from `.env.example`):
+   ```bash
+   cp .env.example .env
+   # Edit .env with your credentials
+   ```
+
+#### Proxy Modes
+
+| Mode | Description | Best For |
+|------|-------------|----------|
+| `direct` | No proxy (default) | Testing, low-volume |
+| `residential` | 175M+ rotating residential IPs | Most retailers |
+| `web_scraper_api` | Managed service with JS rendering | Walmart, Best Buy |
+
+#### Usage
+
+```bash
+# Run with residential proxies
+python run.py --all --proxy residential
+
+# Run with Web Scraper API (includes JS rendering)
+python run.py --retailer walmart --proxy web_scraper_api --render-js
+
+# Specify country for geo-targeting
+python run.py --all --proxy residential --proxy-country us
+
+# Configure in retailers.yaml (per-retailer override)
+# See config/retailers.yaml for examples
+```
+
+#### Docker with Proxies
+
+```bash
+# Set credentials and run
+OXYLABS_USERNAME=user OXYLABS_PASSWORD=pass \
+  docker-compose run scraper python run.py --all --proxy residential
+```
+
 ## Expected Performance
 
-| Metric | Sequential | Concurrent |
-|--------|------------|------------|
-| Full run (6 retailers) | ~30-40 hours | ~8-12 hours |
-| Incremental run | ~30-40 hours | ~1-2 hours |
+| Metric | Direct Mode | With Proxies |
+|--------|-------------|--------------|
+| Full run (6 retailers) | ~8-12 hours | ~1-2 hours |
+| Incremental run | ~1-2 hours | ~15-30 mins |
+| IP blocking risk | Medium | Very Low |
+| Rate limit handling | Manual delays | Automatic |
 
 ## Supported Retailers
 

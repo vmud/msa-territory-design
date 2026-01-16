@@ -1,7 +1,45 @@
 # Multi-Retailer Store Scraper Configuration
 # This file contains configuration for all supported retailers
 
-# Default settings (can be overridden per retailer)
+# =============================================================================
+# PROXY CONFIGURATION (Oxylabs Integration)
+# =============================================================================
+# Credentials are loaded from environment variables:
+#   OXYLABS_USERNAME - Your Oxylabs username
+#   OXYLABS_PASSWORD - Your Oxylabs password
+#
+# Modes:
+#   direct          - No proxy (default, use built-in delays)
+#   residential     - Oxylabs Residential Proxies (175M+ IPs)
+#   web_scraper_api - Oxylabs Web Scraper API (managed service)
+# =============================================================================
+
+proxy:
+  # Global proxy settings (can be overridden per retailer)
+  mode: "direct"  # Options: direct, residential, web_scraper_api
+
+  # Residential proxy settings
+  residential:
+    endpoint: "pr.oxylabs.io:7777"
+    country_code: "us"
+    session_type: "rotating"  # rotating or sticky
+
+  # Web Scraper API settings
+  web_scraper_api:
+    endpoint: "https://realtime.oxylabs.io/v1/queries"
+    render_js: false    # Enable for JS-heavy sites (Walmart, etc.)
+    parse: false        # Return parsed JSON instead of HTML
+
+  # Request settings when using proxies
+  timeout: 60
+  max_retries: 3
+  retry_delay: 2.0
+
+# =============================================================================
+# DEFAULT SETTINGS
+# =============================================================================
+# Can be overridden per retailer
+
 defaults:
   min_delay: 2.0
   max_delay: 5.0
@@ -28,6 +66,10 @@ retailers:
     min_delay: 2.0
     max_delay: 5.0
     checkpoint_interval: 10
+    # Proxy override: Verizon works well with residential proxies
+    # proxy:
+    #   mode: "residential"
+    #   render_js: false
     output_fields:
       - name
       - street_address
@@ -135,6 +177,10 @@ retailers:
     min_delay: 1.0
     max_delay: 2.0
     checkpoint_interval: 100
+    # Proxy override: Walmart uses __NEXT_DATA__ which benefits from JS rendering
+    # proxy:
+    #   mode: "web_scraper_api"
+    #   render_js: true
     output_fields:
       - store_id
       - name
@@ -163,6 +209,10 @@ retailers:
     min_delay: 0.5
     max_delay: 1.0
     checkpoint_interval: 100
+    # Proxy override: Best Buy has stronger anti-bot, recommend Web Scraper API
+    # proxy:
+    #   mode: "web_scraper_api"
+    #   render_js: true
     output_fields:
       - store_id
       - name
