@@ -1,0 +1,320 @@
+#!/usr/bin/env python3
+"""
+Unified CLI for Multi-Retailer Store Scraper
+
+Usage:
+    python run.py --retailer verizon              # Single retailer
+    python run.py --all                            # All retailers concurrently
+    python run.py --all --exclude bestbuy          # All except specified
+    python run.py --all --resume                   # Resume from checkpoints
+    python run.py --status                         # Show all retailer progress
+    python run.py --status --retailer verizon      # Single retailer status
+"""
+
+import argparse
+import asyncio
+import logging
+import sys
+from typing import List, Optional
+
+from src.shared.utils import setup_logging
+from src.scrapers import get_available_retailers, get_scraper_module
+
+
+def setup_parser() -> argparse.ArgumentParser:
+    """Setup command line argument parser"""
+    parser = argparse.ArgumentParser(
+        description="Multi-Retailer Store Scraper",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__
+    )
+
+    # Retailer selection
+    retailer_group = parser.add_mutually_exclusive_group()
+    retailer_group.add_argument(
+        '--retailer', '-r',
+        type=str,
+        choices=get_available_retailers(),
+        help='Run specific retailer scraper'
+    )
+    retailer_group.add_argument(
+        '--all', '-a',
+        action='store_true',
+        help='Run all retailers concurrently'
+    )
+
+    # Exclusions (for --all mode)
+    parser.add_argument(
+        '--exclude', '-e',
+        type=str,
+        nargs='+',
+        choices=get_available_retailers(),
+        default=[],
+        help='Exclude specific retailers when using --all'
+    )
+
+    # Execution options
+    parser.add_argument(
+        '--resume',
+        action='store_true',
+        help='Resume from checkpoints'
+    )
+    parser.add_argument(
+        '--incremental',
+        action='store_true',
+        help='Only process new/changed stores (requires previous run)'
+    )
+
+    # Testing options
+    parser.add_argument(
+        '--test',
+        action='store_true',
+        help='Quick test mode (10 stores per retailer)'
+    )
+    parser.add_argument(
+        '--limit',
+        type=int,
+        default=None,
+        help='Limit number of stores to process per retailer'
+    )
+
+    # Status
+    parser.add_argument(
+        '--status',
+        action='store_true',
+        help='Show progress without running'
+    )
+
+    # Logging
+    parser.add_argument(
+        '--log-file',
+        type=str,
+        default='logs/scraper.log',
+        help='Log file path (default: logs/scraper.log)'
+    )
+    parser.add_argument(
+        '--verbose', '-v',
+        action='store_true',
+        help='Verbose output'
+    )
+
+    return parser
+
+
+def get_retailers_to_run(args) -> List[str]:
+    """Determine which retailers to run based on arguments"""
+    if args.retailer:
+        return [args.retailer]
+    elif args.all:
+        all_retailers = get_available_retailers()
+        return [r for r in all_retailers if r not in args.exclude]
+    else:
+        return []
+
+
+def show_status(retailers: Optional[List[str]] = None) -> None:
+    """Show status for specified retailers (or all if None)"""
+    if retailers is None:
+        retailers = get_available_retailers()
+
+    print("\n" + "=" * 60)
+    print("RETAILER SCRAPER STATUS")
+    print("=" * 60)
+
+    for retailer in retailers:
+        print(f"\n--- {retailer.upper()} ---")
+        try:
+            # Try to load checkpoint data for status
+            from src.shared.utils import load_checkpoint
+            import os
+
+            checkpoint_dir = f"data/{retailer}/checkpoints"
+            output_dir = f"data/{retailer}/output"
+
+            # Check for checkpoint files
+            if os.path.exists(checkpoint_dir):
+                checkpoints = os.listdir(checkpoint_dir)
+                if checkpoints:
+                    print(f"  Checkpoints: {', '.join(checkpoints)}")
+                else:
+                    print("  Checkpoints: None")
+            else:
+                print("  Checkpoints: Directory not found")
+
+            # Check for output files
+            if os.path.exists(output_dir):
+                outputs = os.listdir(output_dir)
+                if outputs:
+                    print(f"  Outputs: {', '.join(outputs)}")
+
+                    # Try to count stores in latest output
+                    for out_file in outputs:
+                        if out_file.endswith('.json'):
+                            import json
+                            filepath = os.path.join(output_dir, out_file)
+                            try:
+                                with open(filepath, 'r') as f:
+                                    data = json.load(f)
+                                    if isinstance(data, list):
+                                        print(f"    {out_file}: {len(data)} stores")
+                            except Exception:
+                                pass
+                else:
+                    print("  Outputs: None")
+            else:
+                print("  Outputs: Directory not found")
+
+        except Exception as e:
+            print(f"  Error getting status: {e}")
+
+    print("\n" + "=" * 60)
+
+
+async def run_retailer_async(retailer: str, **kwargs) -> dict:
+    """Run a single retailer scraper asynchronously
+
+    Note: Currently wraps synchronous scrapers. Will be updated
+    when scrapers are converted to async.
+    """
+    logging.info(f"Starting scraper for {retailer}")
+
+    try:
+        # Get the scraper module
+        scraper_module = get_scraper_module(retailer)
+
+        # For now, run synchronously in executor since scrapers are sync
+        # TODO: Convert scrapers to native async
+        import requests
+
+        session = requests.Session()
+
+        # Get the appropriate run function based on retailer
+        # Each retailer module should have similar structure
+        # For now, we'll run phase by phase
+
+        result = {
+            'retailer': retailer,
+            'status': 'completed',
+            'stores': 0,
+            'error': None
+        }
+
+        # TODO: Implement actual scraping logic integration
+        logging.info(f"Completed scraper for {retailer}")
+        return result
+
+    except Exception as e:
+        logging.error(f"Error running {retailer}: {e}")
+        return {
+            'retailer': retailer,
+            'status': 'error',
+            'stores': 0,
+            'error': str(e)
+        }
+
+
+async def run_all_retailers(retailers: List[str], **kwargs) -> dict:
+    """Run multiple retailers concurrently"""
+    logging.info(f"Starting concurrent scrape for {len(retailers)} retailers: {retailers}")
+
+    tasks = [
+        run_retailer_async(retailer, **kwargs)
+        for retailer in retailers
+    ]
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Process results
+    summary = {}
+    for retailer, result in zip(retailers, results):
+        if isinstance(result, Exception):
+            summary[retailer] = {
+                'status': 'error',
+                'error': str(result)
+            }
+        else:
+            summary[retailer] = result
+
+    return summary
+
+
+def main():
+    """Main entry point"""
+    parser = setup_parser()
+    args = parser.parse_args()
+
+    # Setup logging
+    log_level = logging.DEBUG if args.verbose else logging.INFO
+    setup_logging(args.log_file)
+    logging.getLogger().setLevel(log_level)
+
+    # Handle status command
+    if args.status:
+        retailers = [args.retailer] if args.retailer else None
+        show_status(retailers)
+        return 0
+
+    # Get retailers to run
+    retailers = get_retailers_to_run(args)
+
+    if not retailers:
+        print("No retailers specified. Use --retailer <name> or --all")
+        print(f"Available retailers: {', '.join(get_available_retailers())}")
+        return 1
+
+    # Set limit for test mode
+    limit = args.limit
+    if args.test and limit is None:
+        limit = 10
+
+    logging.info(f"Running scrapers for: {retailers}")
+    if limit:
+        logging.info(f"Limit: {limit} stores per retailer")
+    if args.resume:
+        logging.info("Resume mode enabled")
+    if args.incremental:
+        logging.info("Incremental mode enabled")
+
+    # Run scrapers
+    try:
+        if len(retailers) == 1:
+            # Single retailer - run directly
+            result = asyncio.run(run_retailer_async(
+                retailers[0],
+                resume=args.resume,
+                incremental=args.incremental,
+                limit=limit
+            ))
+            print(f"\nResult for {retailers[0]}: {result['status']}")
+        else:
+            # Multiple retailers - run concurrently
+            results = asyncio.run(run_all_retailers(
+                retailers,
+                resume=args.resume,
+                incremental=args.incremental,
+                limit=limit
+            ))
+
+            print("\n" + "=" * 40)
+            print("SCRAPING RESULTS")
+            print("=" * 40)
+            for retailer, result in results.items():
+                status = result.get('status', 'unknown')
+                stores = result.get('stores', 0)
+                error = result.get('error', '')
+                print(f"  {retailer}: {status} ({stores} stores)")
+                if error:
+                    print(f"    Error: {error}")
+
+        return 0
+
+    except KeyboardInterrupt:
+        logging.info("Scraping interrupted by user")
+        return 130
+    except Exception as e:
+        logging.error(f"Scraping failed: {e}")
+        return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

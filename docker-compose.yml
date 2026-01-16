@@ -1,0 +1,111 @@
+version: '3.8'
+
+services:
+  # Main scraper service
+  scraper:
+    build: .
+    container_name: retail-scraper
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - LOG_LEVEL=INFO
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    # Override command for different modes:
+    # docker-compose run scraper python run.py --retailer verizon
+    # docker-compose run scraper python run.py --all --test --limit 10
+
+  # Dashboard service for monitoring
+  dashboard:
+    build: .
+    container_name: retail-scraper-dashboard
+    command: python dashboard/app.py
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - FLASK_ENV=production
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    depends_on:
+      - scraper
+
+  # Single retailer services (optional, for running specific retailers)
+  verizon:
+    build: .
+    container_name: retail-scraper-verizon
+    command: python run.py --retailer verizon --resume
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - LOG_LEVEL=INFO
+    profiles:
+      - retailers
+
+  att:
+    build: .
+    container_name: retail-scraper-att
+    command: python run.py --retailer att --resume
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - LOG_LEVEL=INFO
+    profiles:
+      - retailers
+
+  target:
+    build: .
+    container_name: retail-scraper-target
+    command: python run.py --retailer target --resume
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - LOG_LEVEL=INFO
+    profiles:
+      - retailers
+
+  tmobile:
+    build: .
+    container_name: retail-scraper-tmobile
+    command: python run.py --retailer tmobile --resume
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - LOG_LEVEL=INFO
+    profiles:
+      - retailers
+
+  walmart:
+    build: .
+    container_name: retail-scraper-walmart
+    command: python run.py --retailer walmart --resume
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - LOG_LEVEL=INFO
+    profiles:
+      - retailers
+
+  bestbuy:
+    build: .
+    container_name: retail-scraper-bestbuy
+    command: python run.py --retailer bestbuy --resume
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - LOG_LEVEL=INFO
+    profiles:
+      - retailers
+
+volumes:
+  scraper-data:
+  scraper-logs:
