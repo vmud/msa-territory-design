@@ -41,9 +41,13 @@ class ProxyConfig:
     # Mode selection
     mode: ProxyMode = ProxyMode.DIRECT
 
-    # Oxylabs credentials
-    username: str = ""
-    password: str = ""
+    # Oxylabs credentials (mode-specific)
+    # For residential proxies
+    residential_username: str = ""
+    residential_password: str = ""
+    # For Web Scraper API
+    scraper_api_username: str = ""
+    scraper_api_password: str = ""
 
     # Residential proxy settings
     residential_endpoint: str = "pr.oxylabs.io:7777"
@@ -67,6 +71,49 @@ class ProxyConfig:
     min_delay: float = 0.0
     max_delay: float = 0.0
 
+    @property
+    def username(self) -> str:
+        """Get the appropriate username for the current mode"""
+        if self.mode == ProxyMode.RESIDENTIAL:
+            return self.residential_username
+        elif self.mode == ProxyMode.WEB_SCRAPER_API:
+            return self.scraper_api_username
+        return ""
+
+    @property
+    def password(self) -> str:
+        """Get the appropriate password for the current mode"""
+        if self.mode == ProxyMode.RESIDENTIAL:
+            return self.residential_password
+        elif self.mode == ProxyMode.WEB_SCRAPER_API:
+            return self.scraper_api_password
+        return ""
+
+    @classmethod
+    def _get_credentials_for_mode(cls, mode: ProxyMode) -> tuple:
+        """
+        Get credentials for a specific mode with fallback to legacy env vars.
+
+        Priority order:
+        1. Mode-specific env vars (OXYLABS_RESIDENTIAL_* or OXYLABS_SCRAPER_API_*)
+        2. Legacy/fallback env vars (OXYLABS_USERNAME/PASSWORD)
+        """
+        # Legacy/fallback credentials
+        fallback_username = os.getenv("OXYLABS_USERNAME", "")
+        fallback_password = os.getenv("OXYLABS_PASSWORD", "")
+
+        if mode == ProxyMode.RESIDENTIAL:
+            username = os.getenv("OXYLABS_RESIDENTIAL_USERNAME", "") or fallback_username
+            password = os.getenv("OXYLABS_RESIDENTIAL_PASSWORD", "") or fallback_password
+        elif mode == ProxyMode.WEB_SCRAPER_API:
+            username = os.getenv("OXYLABS_SCRAPER_API_USERNAME", "") or fallback_username
+            password = os.getenv("OXYLABS_SCRAPER_API_PASSWORD", "") or fallback_password
+        else:
+            username = ""
+            password = ""
+
+        return username, password
+
     @classmethod
     def from_env(cls) -> "ProxyConfig":
         """Create config from environment variables"""
@@ -79,10 +126,16 @@ class ProxyConfig:
         }
         mode = mode_map.get(mode_str, ProxyMode.DIRECT)
 
+        # Get credentials for each mode (with fallback)
+        res_username, res_password = cls._get_credentials_for_mode(ProxyMode.RESIDENTIAL)
+        api_username, api_password = cls._get_credentials_for_mode(ProxyMode.WEB_SCRAPER_API)
+
         return cls(
             mode=mode,
-            username=os.getenv("OXYLABS_USERNAME", ""),
-            password=os.getenv("OXYLABS_PASSWORD", ""),
+            residential_username=res_username,
+            residential_password=res_password,
+            scraper_api_username=api_username,
+            scraper_api_password=api_password,
             country_code=os.getenv("OXYLABS_COUNTRY", "us"),
             city=os.getenv("OXYLABS_CITY", ""),
             state=os.getenv("OXYLABS_STATE", ""),
@@ -103,10 +156,34 @@ class ProxyConfig:
         }
         mode = mode_map.get(mode_str, ProxyMode.DIRECT)
 
+        # Get credentials for each mode (with fallback from env)
+        res_username, res_password = cls._get_credentials_for_mode(ProxyMode.RESIDENTIAL)
+        api_username, api_password = cls._get_credentials_for_mode(ProxyMode.WEB_SCRAPER_API)
+
+        # Allow explicit override from dict
+        residential_username = data.get("residential_username", res_username)
+        residential_password = data.get("residential_password", res_password)
+        scraper_api_username = data.get("scraper_api_username", api_username)
+        scraper_api_password = data.get("scraper_api_password", api_password)
+
+        # Also support legacy "username"/"password" keys for backwards compatibility
+        if "username" in data:
+            if mode == ProxyMode.RESIDENTIAL:
+                residential_username = data["username"]
+            elif mode == ProxyMode.WEB_SCRAPER_API:
+                scraper_api_username = data["username"]
+        if "password" in data:
+            if mode == ProxyMode.RESIDENTIAL:
+                residential_password = data["password"]
+            elif mode == ProxyMode.WEB_SCRAPER_API:
+                scraper_api_password = data["password"]
+
         return cls(
             mode=mode,
-            username=data.get("username", os.getenv("OXYLABS_USERNAME", "")),
-            password=data.get("password", os.getenv("OXYLABS_PASSWORD", "")),
+            residential_username=residential_username,
+            residential_password=residential_password,
+            scraper_api_username=scraper_api_username,
+            scraper_api_password=scraper_api_password,
             country_code=data.get("country_code", "us"),
             city=data.get("city", ""),
             state=data.get("state", ""),
@@ -482,6 +559,10 @@ def create_proxy_client(
     mode: str = "direct",
     username: str = "",
     password: str = "",
+    residential_username: str = "",
+    residential_password: str = "",
+    scraper_api_username: str = "",
+    scraper_api_password: str = "",
     **kwargs
 ) -> ProxyClient:
     """
@@ -489,8 +570,12 @@ def create_proxy_client(
 
     Args:
         mode: "direct", "residential", or "web_scraper_api"
-        username: Oxylabs username
-        password: Oxylabs password
+        username: Legacy username (used as fallback for both modes)
+        password: Legacy password (used as fallback for both modes)
+        residential_username: Username for residential proxies
+        residential_password: Password for residential proxies
+        scraper_api_username: Username for Web Scraper API
+        scraper_api_password: Password for Web Scraper API
         **kwargs: Additional ProxyConfig parameters
 
     Returns:
@@ -502,11 +587,24 @@ def create_proxy_client(
         "web_scraper_api": ProxyMode.WEB_SCRAPER_API,
         "scraper_api": ProxyMode.WEB_SCRAPER_API,
     }
+    proxy_mode = mode_map.get(mode.lower(), ProxyMode.DIRECT)
+
+    # Get credentials with fallback chain
+    res_user, res_pass = ProxyConfig._get_credentials_for_mode(ProxyMode.RESIDENTIAL)
+    api_user, api_pass = ProxyConfig._get_credentials_for_mode(ProxyMode.WEB_SCRAPER_API)
+
+    # Override with explicit parameters if provided
+    res_user = residential_username or username or res_user
+    res_pass = residential_password or password or res_pass
+    api_user = scraper_api_username or username or api_user
+    api_pass = scraper_api_password or password or api_pass
 
     config = ProxyConfig(
-        mode=mode_map.get(mode.lower(), ProxyMode.DIRECT),
-        username=username or os.getenv("OXYLABS_USERNAME", ""),
-        password=password or os.getenv("OXYLABS_PASSWORD", ""),
+        mode=proxy_mode,
+        residential_username=res_user,
+        residential_password=res_pass,
+        scraper_api_username=api_user,
+        scraper_api_password=api_pass,
         **kwargs
     )
 

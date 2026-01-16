@@ -280,12 +280,32 @@ def main():
         from src.shared import init_proxy_from_yaml, get_proxy_client, ProxyConfig, ProxyMode
         import os
 
-        # Check for credentials
-        if args.proxy != 'direct':
-            if not os.getenv('OXYLABS_USERNAME') or not os.getenv('OXYLABS_PASSWORD'):
-                print("Error: OXYLABS_USERNAME and OXYLABS_PASSWORD environment variables required")
-                print("Set them with: export OXYLABS_USERNAME=your_username")
-                print("              export OXYLABS_PASSWORD=your_password")
+        # Check for mode-specific credentials
+        if args.proxy == 'residential':
+            # Check for residential credentials (with fallback to legacy)
+            res_user = os.getenv('OXYLABS_RESIDENTIAL_USERNAME') or os.getenv('OXYLABS_USERNAME')
+            res_pass = os.getenv('OXYLABS_RESIDENTIAL_PASSWORD') or os.getenv('OXYLABS_PASSWORD')
+            if not res_user or not res_pass:
+                print("Error: Residential proxy credentials required")
+                print("Set them with:")
+                print("  export OXYLABS_RESIDENTIAL_USERNAME=your_username")
+                print("  export OXYLABS_RESIDENTIAL_PASSWORD=your_password")
+                print("Or use legacy variables:")
+                print("  export OXYLABS_USERNAME=your_username")
+                print("  export OXYLABS_PASSWORD=your_password")
+                return 1
+        elif args.proxy == 'web_scraper_api':
+            # Check for Web Scraper API credentials (with fallback to legacy)
+            api_user = os.getenv('OXYLABS_SCRAPER_API_USERNAME') or os.getenv('OXYLABS_USERNAME')
+            api_pass = os.getenv('OXYLABS_SCRAPER_API_PASSWORD') or os.getenv('OXYLABS_PASSWORD')
+            if not api_user or not api_pass:
+                print("Error: Web Scraper API credentials required")
+                print("Set them with:")
+                print("  export OXYLABS_SCRAPER_API_USERNAME=your_username")
+                print("  export OXYLABS_SCRAPER_API_PASSWORD=your_password")
+                print("Or use legacy variables:")
+                print("  export OXYLABS_USERNAME=your_username")
+                print("  export OXYLABS_PASSWORD=your_password")
                 return 1
 
         # Build proxy config from CLI args

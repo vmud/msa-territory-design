@@ -13,6 +13,14 @@ services:
       - PYTHONUNBUFFERED=1
       # Oxylabs proxy credentials (optional)
       # Set these for proxy mode, or use --proxy direct for no proxy
+      #
+      # Residential Proxy credentials
+      - OXYLABS_RESIDENTIAL_USERNAME=${OXYLABS_RESIDENTIAL_USERNAME:-}
+      - OXYLABS_RESIDENTIAL_PASSWORD=${OXYLABS_RESIDENTIAL_PASSWORD:-}
+      # Web Scraper API credentials
+      - OXYLABS_SCRAPER_API_USERNAME=${OXYLABS_SCRAPER_API_USERNAME:-}
+      - OXYLABS_SCRAPER_API_PASSWORD=${OXYLABS_SCRAPER_API_PASSWORD:-}
+      # Legacy/fallback credentials (used if mode-specific not set)
       - OXYLABS_USERNAME=${OXYLABS_USERNAME:-}
       - OXYLABS_PASSWORD=${OXYLABS_PASSWORD:-}
       # Proxy mode: direct, residential, web_scraper_api
