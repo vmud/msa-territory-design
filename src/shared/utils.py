@@ -128,6 +128,10 @@ def get_with_retry(
             else:
                 response = session.get(url, timeout=timeout)
 
+            if response is None:
+                logging.warning(f"Got None response for {url} on attempt {attempt + 1}/{max_retries}")
+                continue
+
             if response.status_code == 200:
                 logging.debug(f"Successfully fetched {url}")
                 return response
