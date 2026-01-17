@@ -108,6 +108,7 @@ Do not make assumptions on important decisions — get clarification first.
 ---
 
 ### [ ] Step: API - Control Endpoints
+<!-- chat-id: 61258bbc-a282-4d13-a959-b5be53f32bcd -->
 
 Add REST API endpoints for scraper control and monitoring.
 
