@@ -58,26 +58,41 @@ Do not make assumptions on important decisions — get clarification first.
 
 ---
 
-### [ ] Step: Backend - Scraper Control & Management
+### [x] Step: Backend - Scraper Control & Management
+<!-- chat-id: 3f5c9c40-888d-4ea5-bbed-46d3ba072fd5 -->
 
-Implement scraper lifecycle management and control system.
+**Completed**: Implemented scraper lifecycle management and control system.
 
-**Files to Create:**
+**Files Created:**
 - `src/shared/scraper_manager.py` - Process lifecycle management
-  - Start/stop scrapers (subprocess.Popen wrapper)
-  - Track running processes (in-memory dict)
-  - Handle graceful shutdown (SIGTERM)
-  - Support restart with resume (--resume flag)
+  - `ScraperManager` class for managing scraper processes
+  - `start()` - Start scrapers with subprocess.Popen, supports resume/limit/test/proxy options
+  - `stop()` - Graceful shutdown with SIGTERM, fallback to SIGKILL after timeout
+  - `restart()` - Stop and start with resume flag support
+  - `is_running()` - Check if scraper process is active
+  - `get_status()` / `get_all_status()` - Query running scrapers
+  - `stop_all()` - Bulk stop operation
+  - `cleanup_exited()` - Clean up finished processes
+  - Singleton pattern with `get_scraper_manager()`
 
-**Reuse Existing:**
-- Use existing `run.py` CLI interface via subprocess
-- Leverage existing checkpoint system for resume
+**Files Modified:**
+- `src/shared/__init__.py` - Added exports for scraper_manager, run_tracker, and status modules
 
-**Verification:**
-- Start a scraper via manager (verify process spawned)
-- Stop a running scraper gracefully (verify SIGTERM sent)
-- Restart with resume flag (verify checkpoint loaded)
-- Handle errors during scraper execution
+**Integration:**
+- Uses existing `run.py` CLI via subprocess
+- Integrates with `RunTracker` to track PIDs and metadata
+- Leverages existing checkpoint system for resume functionality
+- Creates timestamped log files in `logs/scrapers/`
+- Validates retailer config before starting
+
+**Verification Completed:**
+- ✅ Start a scraper via manager (process spawned and verified with os.kill)
+- ✅ Stop a running scraper gracefully (SIGTERM sent, timeout handling works)
+- ✅ Restart with resume flag (checkpoint loaded, resume=True in config)
+- ✅ Handle errors during scraper execution (ValueError for invalid/disabled retailers)
+- ✅ Multiple concurrent scrapers (started 3 retailers simultaneously)
+- ✅ Log file creation and content verification
+- ✅ Run tracking integration (PIDs, configs, run IDs tracked correctly)
 
 ---
 
