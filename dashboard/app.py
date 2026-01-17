@@ -25,7 +25,9 @@ def require_json(f):
     """Decorator to require JSON Content-Type for POST endpoints"""
     def wrapper(*args, **kwargs):
         if request.method == 'POST':
-            if request.content_type != 'application/json':
+            # Use request.is_json which properly handles charset and other parameters
+            # This accepts "application/json" and "application/json; charset=utf-8"
+            if not request.is_json:
                 return jsonify({"error": "Content-Type must be application/json"}), 415
         return f(*args, **kwargs)
     wrapper.__name__ = f.__name__

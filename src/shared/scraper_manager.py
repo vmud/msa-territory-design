@@ -107,6 +107,69 @@ class ScraperManager:
         except Exception as e:
             logger.error(f"Error during cleanup: {e}")
     
+    def _is_process_running_unsafe(self, retailer: str) -> bool:
+        """Check if process is running without acquiring lock (internal use only)
+        
+        Args:
+            retailer: Retailer name
+        
+        Returns:
+            True if running, False otherwise
+        
+        Note:
+            This method assumes the caller already holds self._lock
+        """
+        if retailer not in self._processes:
+            return False
+        
+        process_info = self._processes[retailer]
+        process = process_info.get("process")
+        pid = process_info["pid"]
+        
+        if process:
+            # Check subprocess.Popen object
+            return process.poll() is None
+        else:
+            # Check PID for recovered processes
+            try:
+                os.kill(pid, 0)
+                return True
+            except (OSError, ProcessLookupError):
+                return False
+    
+    def _cleanup_process_unsafe(self, retailer: str) -> None:
+        """Clean up exited process without acquiring lock (internal use only)
+        
+        Args:
+            retailer: Retailer name
+        
+        Note:
+            This method assumes the caller already holds self._lock
+        """
+        if retailer not in self._processes:
+            return
+        
+        process_info = self._processes[retailer]
+        process = process_info.get("process")
+        pid = process_info["pid"]
+        run_id = process_info["run_id"]
+        
+        exit_code = None
+        if process:
+            exit_code = process.returncode
+        
+        logger.info(f"Cleaning up exited scraper for {retailer} (PID: {pid}, exit code: {exit_code})")
+        
+        # Update run tracker
+        tracker = RunTracker(retailer, run_id=run_id)
+        if exit_code == 0:
+            tracker.complete()
+        else:
+            tracker.fail(f"Process exited with code {exit_code or 'unknown'}")
+        
+        # Remove from tracking
+        del self._processes[retailer]
+    
     def _build_command(
         self,
         retailer: str,
@@ -200,8 +263,14 @@ class ScraperManager:
             if retailer not in config:
                 raise ValueError(f"Unknown retailer: {retailer}")
             
+            # Check if process is actually still running (not just in tracking dict)
             if retailer in self._processes:
-                raise ValueError(f"Scraper for {retailer} is already running")
+                if self._is_process_running_unsafe(retailer):
+                    raise ValueError(f"Scraper for {retailer} is already running")
+                else:
+                    # Process has exited, clean it up before proceeding
+                    logger.info(f"Cleaning up stale process entry for {retailer} before starting")
+                    self._cleanup_process_unsafe(retailer)
             
             if not config[retailer].get('enabled', False):
                 raise ValueError(f"Retailer {retailer} is disabled in config")
