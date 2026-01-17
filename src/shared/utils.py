@@ -333,7 +333,12 @@ def get_retailer_proxy_config(
     Returns:
         Dict compatible with ProxyConfig.from_dict()
     """
+    VALID_MODES = {'direct', 'residential', 'web_scraper_api'}
+    
     if cli_override:
+        if cli_override not in VALID_MODES:
+            logging.warning(f"[{retailer}] Invalid CLI proxy mode '{cli_override}', falling back to direct")
+            return _build_proxy_config_dict(mode='direct')
         logging.info(f"[{retailer}] Using CLI override proxy mode: {cli_override}")
         return _build_proxy_config_dict(mode=cli_override)
     
@@ -352,16 +357,29 @@ def get_retailer_proxy_config(
     if 'proxy' in retailer_config:
         proxy_settings = retailer_config['proxy']
         merged_config = _merge_proxy_config(proxy_settings, config.get('proxy', {}))
-        logging.info(f"[{retailer}] Using retailer-specific proxy mode: {merged_config.get('mode')}")
+        mode = merged_config.get('mode', 'direct')
+        if mode not in VALID_MODES:
+            logging.warning(f"[{retailer}] Invalid retailer proxy mode '{mode}', falling back to direct")
+            merged_config['mode'] = 'direct'
+        else:
+            logging.info(f"[{retailer}] Using retailer-specific proxy mode: {mode}")
         return merged_config
     
     if 'proxy' in config:
         proxy_config = _build_proxy_config_from_yaml(config['proxy'])
-        logging.info(f"[{retailer}] Using global YAML proxy mode: {proxy_config.get('mode')}")
+        mode = proxy_config.get('mode', 'direct')
+        if mode not in VALID_MODES:
+            logging.warning(f"[{retailer}] Invalid global proxy mode '{mode}', falling back to direct")
+            proxy_config['mode'] = 'direct'
+        else:
+            logging.info(f"[{retailer}] Using global YAML proxy mode: {mode}")
         return proxy_config
     
     env_mode = os.getenv('PROXY_MODE')
     if env_mode:
+        if env_mode not in VALID_MODES:
+            logging.warning(f"[{retailer}] Invalid environment proxy mode '{env_mode}', falling back to direct")
+            return _build_proxy_config_dict(mode='direct')
         logging.info(f"[{retailer}] Using environment variable proxy mode: {env_mode}")
         return _build_proxy_config_dict(mode=env_mode)
     
@@ -443,6 +461,9 @@ def get_proxy_client(config: Optional[Dict[str, Any]] = None, retailer: Optional
 def init_proxy_from_yaml(yaml_path: str = "config/retailers.yaml") -> ProxyClient:
     """
     Initialize proxy client from retailers.yaml configuration.
+    
+    Deprecated: Use get_retailer_proxy_config() + create_proxied_session() for new code.
+    This function loads global proxy config and caches it under '__global__' key.
 
     Args:
         yaml_path: Path to retailers.yaml file
@@ -450,8 +471,6 @@ def init_proxy_from_yaml(yaml_path: str = "config/retailers.yaml") -> ProxyClien
     Returns:
         Configured ProxyClient instance
     """
-    global _proxy_client
-
     try:
         import yaml
         with open(yaml_path, 'r') as f:
@@ -460,7 +479,6 @@ def init_proxy_from_yaml(yaml_path: str = "config/retailers.yaml") -> ProxyClien
         proxy_config = config.get('proxy', {})
         mode = proxy_config.get('mode', 'direct')
 
-        # Build config dict from YAML structure
         config_dict = {
             'mode': mode,
             'timeout': proxy_config.get('timeout', 60),
@@ -468,7 +486,6 @@ def init_proxy_from_yaml(yaml_path: str = "config/retailers.yaml") -> ProxyClien
             'retry_delay': proxy_config.get('retry_delay', 2.0),
         }
 
-        # Add mode-specific settings
         if mode == 'residential':
             res_config = proxy_config.get('residential', {})
             config_dict.update({
@@ -484,9 +501,9 @@ def init_proxy_from_yaml(yaml_path: str = "config/retailers.yaml") -> ProxyClien
                 'parse': api_config.get('parse', False),
             })
 
-        _proxy_client = get_proxy_client(config_dict)
+        client = get_proxy_client(config_dict)
         logging.info(f"Initialized proxy client from {yaml_path} in {mode} mode")
-        return _proxy_client
+        return client
 
     except FileNotFoundError:
         logging.warning(f"Config file {yaml_path} not found, using environment config")
@@ -553,7 +570,7 @@ def create_proxied_session(
         return session
     
     try:
-        client = get_proxy_client(proxy_config_dict)
+        client = get_proxy_client(proxy_config_dict, retailer=retailer_name)
         
         if not client.config.validate():
             logging.error(f"[{retailer_name}] Missing credentials for {mode} mode, falling back to direct")
