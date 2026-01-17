@@ -196,7 +196,7 @@ async def run_retailer_async(retailer: str, cli_proxy_override: Optional[str] = 
 
     Note: Currently wraps synchronous scrapers. Will be updated
     when scrapers are converted to async.
-    
+
     Args:
         retailer: Retailer name
         cli_proxy_override: Optional CLI proxy mode override from --proxy flag
@@ -206,11 +206,11 @@ async def run_retailer_async(retailer: str, cli_proxy_override: Optional[str] = 
 
     try:
         from src.shared.utils import load_retailer_config, create_proxied_session
-        
+
         retailer_config = load_retailer_config(retailer, cli_proxy_override)
-        
+
         session = create_proxied_session(retailer_config)
-        
+
         scraper_module = get_scraper_module(retailer)
 
         result = {
@@ -235,7 +235,7 @@ async def run_retailer_async(retailer: str, cli_proxy_override: Optional[str] = 
 
 async def run_all_retailers(retailers: List[str], cli_proxy_override: Optional[str] = None, **kwargs) -> dict:
     """Run multiple retailers concurrently
-    
+
     Args:
         retailers: List of retailer names to run
         cli_proxy_override: Optional CLI proxy mode override from --proxy flag
@@ -361,7 +361,7 @@ def main():
 
     # Get CLI proxy override
     cli_proxy_override = args.proxy if args.proxy else None
-    
+
     # Run scrapers
     try:
         if len(retailers) == 1:
