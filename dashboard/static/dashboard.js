@@ -142,6 +142,17 @@ function renderRetailerCard(retailerId, data) {
                     ${renderPhases(data)}
                 </div>
             </div>
+            <div class="control-buttons">
+                <button class="control-btn start-btn" onclick="startScraper('${retailerId}')" title="Start scraper">
+                    ▶ Start
+                </button>
+                <button class="control-btn stop-btn" onclick="stopScraper('${retailerId}')" title="Stop scraper">
+                    ⏹ Stop
+                </button>
+                <button class="control-btn restart-btn" onclick="restartScraper('${retailerId}')" title="Restart scraper">
+                    🔄 Restart
+                </button>
+            </div>
             <button class="run-history-toggle" onclick="toggleRunHistory('${retailerId}')">
                 📜 View Run History
             </button>
@@ -493,6 +504,85 @@ function updateLogFilterButtons() {
             btn.classList.remove('active');
         }
     });
+}
+
+async function startScraper(retailer) {
+    try {
+        const response = await fetch('/api/scraper/start', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                retailer: retailer,
+                resume: true
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showNotification(`✅ Started ${retailer} scraper`, 'success');
+            updateDashboard();
+        } else {
+            showNotification(`❌ Error: ${result.error}`, 'error');
+        }
+    } catch (error) {
+        showNotification(`❌ Failed to start scraper: ${error.message}`, 'error');
+    }
+}
+
+async function stopScraper(retailer) {
+    try {
+        const response = await fetch('/api/scraper/stop', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                retailer: retailer,
+                timeout: 30
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showNotification(`⏹ Stopped ${retailer} scraper`, 'success');
+            updateDashboard();
+        } else {
+            showNotification(`❌ Error: ${result.error}`, 'error');
+        }
+    } catch (error) {
+        showNotification(`❌ Failed to stop scraper: ${error.message}`, 'error');
+    }
+}
+
+async function restartScraper(retailer) {
+    try {
+        const response = await fetch('/api/scraper/restart', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                retailer: retailer,
+                resume: true,
+                timeout: 30
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showNotification(`🔄 Restarted ${retailer} scraper`, 'success');
+            updateDashboard();
+        } else {
+            showNotification(`❌ Error: ${result.error}`, 'error');
+        }
+    } catch (error) {
+        showNotification(`❌ Failed to restart scraper: ${error.message}`, 'error');
+    }
 }
 
 document.addEventListener('DOMContentLoaded', () => {

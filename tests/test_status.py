@@ -17,14 +17,14 @@ class TestStatusCalculation:
     def test_get_retailer_status_has_required_fields(self):
         """Test that status dict contains required fields"""
         status = get_retailer_status('verizon')
-        required_fields = ['name', 'status', 'progress', 'stores_scraped', 'duration', 'phases']
+        required_fields = ['name', 'enabled', 'discovery_method', 'phases', 'overall_progress', 'scraper_active', 'last_updated']
         for field in required_fields:
             assert field in status, f"Missing required field: {field}"
     
     def test_get_retailer_status_invalid_retailer(self):
-        """Test that invalid retailer raises ValueError"""
-        with pytest.raises(ValueError, match="Invalid retailer"):
-            get_retailer_status('invalid_retailer')
+        """Test that invalid retailer returns error dict"""
+        status = get_retailer_status('invalid_retailer')
+        assert 'error' in status
     
     def test_get_all_retailers_status_returns_dict(self):
         """Test that get_all_retailers_status returns a dictionary"""
@@ -51,52 +51,60 @@ class TestStatusCalculation:
         """Test that global stats contain expected fields"""
         status = get_all_retailers_status()
         global_stats = status['global']
-        expected_fields = ['total_stores', 'active_scrapers', 'overall_progress', 'est_remaining']
+        expected_fields = ['total_stores', 'active_scrapers', 'overall_progress', 'total_retailers', 'enabled_retailers']
         for field in expected_fields:
             assert field in global_stats, f"Missing global field: {field}"
     
     def test_retailer_status_disabled(self):
-        """Test that disabled retailers have status 'disabled'"""
+        """Test that disabled retailers have enabled=False"""
         status = get_retailer_status('bestbuy')
-        assert status['status'] == 'disabled'
+        assert status['enabled'] == False
     
     def test_retailer_status_progress_range(self):
-        """Test that progress is between 0 and 100"""
+        """Test that overall_progress is between 0 and 100"""
         status = get_retailer_status('verizon')
-        assert 0 <= status['progress'] <= 100
+        assert 0 <= status['overall_progress'] <= 100
     
-    def test_retailer_status_stores_scraped_non_negative(self):
-        """Test that stores_scraped is non-negative"""
+    def test_retailer_status_scraper_active_is_bool(self):
+        """Test that scraper_active is a boolean"""
         status = get_retailer_status('verizon')
-        assert status['stores_scraped'] >= 0
+        assert isinstance(status['scraper_active'], bool)
     
     def test_html_crawl_phases(self):
         """Test that html_crawl retailers have 4 phases"""
         status = get_retailer_status('verizon')
         assert len(status['phases']) == 4
-        expected_phases = ['states', 'cities', 'urls', 'extract']
-        for i, phase_name in enumerate(expected_phases):
-            assert status['phases'][i]['name'] == phase_name
+        expected_phase_keys = ['phase1_states', 'phase2_cities', 'phase3_urls', 'phase4_extract']
+        for phase_key in expected_phase_keys:
+            assert phase_key in status['phases']
+            assert 'name' in status['phases'][phase_key]
+            assert 'total' in status['phases'][phase_key]
+            assert 'completed' in status['phases'][phase_key]
+            assert 'status' in status['phases'][phase_key]
     
     def test_sitemap_phases(self):
         """Test that sitemap retailers have 2 phases"""
         status = get_retailer_status('target')
         assert len(status['phases']) == 2
-        expected_phases = ['sitemap', 'extract']
-        for i, phase_name in enumerate(expected_phases):
-            assert status['phases'][i]['name'] == phase_name
+        expected_phase_keys = ['phase1_sitemap', 'phase2_extract']
+        for phase_key in expected_phase_keys:
+            assert phase_key in status['phases']
+            assert 'name' in status['phases'][phase_key]
+            assert 'total' in status['phases'][phase_key]
+            assert 'completed' in status['phases'][phase_key]
+            assert 'status' in status['phases'][phase_key]
     
     def test_phase_status_values(self):
-        """Test that phase status is one of: pending, active, complete"""
+        """Test that phase status is one of: pending, in_progress, complete"""
         status = get_retailer_status('verizon')
-        valid_statuses = ['pending', 'active', 'complete']
-        for phase in status['phases']:
-            assert phase['status'] in valid_statuses
+        valid_statuses = ['pending', 'in_progress', 'complete']
+        for phase_key, phase_data in status['phases'].items():
+            assert phase_data['status'] in valid_statuses
     
     @patch('src.shared.status.get_checkpoint_path')
     def test_get_retailer_status_with_no_checkpoint(self, mock_checkpoint_path):
         """Test status calculation when no checkpoint exists"""
         mock_checkpoint_path.return_value = Path('/nonexistent/checkpoint.json')
         status = get_retailer_status('verizon')
-        assert status['status'] in ['pending', 'disabled']
-        assert status['progress'] == 0
+        assert status['overall_progress'] == 0
+        assert status['scraper_active'] == False
