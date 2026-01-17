@@ -29,25 +29,32 @@ Do not make assumptions on important decisions — get clarification first.
 
 ---
 
-### [ ] Step: Backend - Multi-Retailer Status System
+### [x] Step: Backend - Multi-Retailer Status System
 <!-- chat-id: bcee6ba8-85c8-4815-93ad-9fa80a66ae0c -->
 
-Refactor status tracking from Verizon-only to support all retailers dynamically.
+**Completed**: Refactored status tracking to support all 6 retailers dynamically.
 
-**Files to Modify:**
-- `src/shared/status.py` - Generalize status calculation
-  - Add `get_retailer_status(retailer: str)` function
-  - Add `get_all_retailers_status()` function
-  - Support different discovery methods (sitemap vs HTML crawl)
-  - Dynamic checkpoint path resolution
+**Files Modified:**
+- `src/shared/status.py` - Generalized status calculation
+  - Added `get_retailer_status(retailer: str)` function
+  - Added `get_all_retailers_status()` function
+  - Supports different discovery methods (html_crawl, sitemap, sitemap_gzip, sitemap_paginated)
+  - Dynamic checkpoint path resolution via `get_checkpoint_path()`
+  - HTML crawl method: 4 phases (states, cities, urls, extract)
+  - Sitemap methods: 2 phases (sitemap, extract)
 
-**Files to Create:**
-- `src/shared/run_tracker.py` - Track run metadata (ID, timestamps, stats, errors)
+**Files Created:**
+- `src/shared/run_tracker.py` - Run metadata tracking
+  - `RunTracker` class for tracking individual runs
+  - Metadata includes: run_id, status, timestamps, config, stats, phases, errors
+  - Helper functions: `get_run_history()`, `get_latest_run()`, `get_active_run()`, `cleanup_old_runs()`
+  - Uses existing checkpoint utilities for persistence
 
-**Verification:**
-- Test status calculation for all 6 retailers
-- Verify checkpoint path resolution
-- Check phase detection for different scraper types
+**Verification Completed:**
+- ✅ Tested status calculation for all 6 retailers (verizon, att, target, tmobile, walmart, bestbuy)
+- ✅ Verified checkpoint path resolution for each retailer
+- ✅ Confirmed phase detection works for html_crawl (4 phases) and sitemap methods (2 phases)
+- ✅ Tested RunTracker with stats updates, error logging, and status transitions
 
 ---
 
