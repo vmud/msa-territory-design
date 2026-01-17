@@ -457,6 +457,17 @@ function parseLogLine(line) {
     };
 }
 
+/**
+ * HTML-encode a string to prevent XSS attacks
+ * @param {string} str - The string to encode
+ * @returns {string} - The HTML-encoded string
+ */
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
 function displayLogs(parsedLines) {
     const logContainer = document.getElementById('log-content');
     
@@ -464,23 +475,31 @@ function displayLogs(parsedLines) {
         const shouldShow = activeLogFilters.has('ALL') || activeLogFilters.has(logLine.level);
         const hiddenClass = shouldShow ? '' : 'hidden';
         
-        let formattedLine = logLine.raw;
+        // SECURITY: HTML-encode the raw log content to prevent XSS
+        // This protects against malicious content in scraped data (e.g., store names)
+        // that could end up in logs and be executed when viewing the dashboard
+        let formattedLine = escapeHtml(logLine.raw);
         
+        // After escaping, we can safely add HTML formatting for known safe elements
         if (logLine.level) {
+            // Escape the level for regex safety
+            const escapedLevel = logLine.level.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             formattedLine = formattedLine.replace(
-                new RegExp(`\\b${logLine.level}\\b`),
-                `<span class="log-level ${logLine.level}">${logLine.level}</span>`
+                new RegExp(`\\b${escapedLevel}\\b`),
+                `<span class="log-level ${escapeHtml(logLine.level)}">${escapeHtml(logLine.level)}</span>`
             );
         }
         
         if (logLine.timestamp) {
             formattedLine = formattedLine.replace(
-                logLine.timestamp,
-                `<span class="log-timestamp">${logLine.timestamp}</span>`
+                escapeHtml(logLine.timestamp),
+                `<span class="log-timestamp">${escapeHtml(logLine.timestamp)}</span>`
             );
         }
         
-        return `<div class="log-line level-${logLine.level} ${hiddenClass}">${formattedLine}</div>`;
+        // Also escape the level in the class name to prevent attribute injection
+        const safeLevel = logLine.level ? escapeHtml(logLine.level) : 'unknown';
+        return `<div class="log-line level-${safeLevel} ${hiddenClass}">${formattedLine}</div>`;
     }).join('');
     
     logContainer.innerHTML = `<div class="log-container">${html}</div>`;
