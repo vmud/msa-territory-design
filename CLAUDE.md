@@ -6,6 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Multi-retailer web scraper that collects retail store locations from Verizon, AT&T, Target, T-Mobile, Walmart, and Best Buy. Features concurrent execution, change detection, checkpoint/resume system, and optional Oxylabs proxy integration.
 
+## Environment Setup
+
+Requires Python 3.8-3.10:
+```bash
+python3 -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+```
+
 ## Common Commands
 
 ```bash
@@ -20,6 +28,9 @@ python run.py --all --resume
 
 # Test mode (10 stores per retailer)
 python run.py --all --test
+
+# Limit stores per retailer
+python run.py --retailer target --limit 100
 
 # Check status without running
 python run.py --status
@@ -85,6 +96,21 @@ run.py                          # Main CLI entry point - handles arg parsing, co
 └── dashboard/app.py            # Flask monitoring UI
 ```
 
+### Scraper Interface
+
+All scrapers implement a `run()` function with this signature:
+```python
+def run(session, retailer_config, retailer: str, **kwargs) -> dict:
+    # Returns: {'stores': [...], 'count': int, 'checkpoints_used': bool}
+```
+
+### Key Defaults (from utils.py)
+
+- `DEFAULT_MIN_DELAY = 2.0` / `DEFAULT_MAX_DELAY = 5.0` - delay between requests
+- `DEFAULT_MAX_RETRIES = 3` - HTTP retry attempts
+- `DEFAULT_TIMEOUT = 30` - request timeout in seconds
+- `DEFAULT_RATE_LIMIT_BASE_WAIT = 30` - wait time on 429 errors
+
 ## Key Patterns
 
 ### Adding a New Retailer
@@ -102,8 +128,8 @@ Proxies configured via environment variables (see `.env.example`):
 - `OXYLABS_USERNAME/PASSWORD` - fallback for both modes
 
 Proxy modes in `config/retailers.yaml`:
-- `direct` - no proxy (default)
-- `residential` - rotating residential IPs
+- `direct` - no proxy (default, 2-5s delays)
+- `residential` - rotating residential IPs (0.2-0.5s delays, 9.6x faster)
 - `web_scraper_api` - managed service with JS rendering
 
 ### Output Structure
