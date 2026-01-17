@@ -585,6 +585,135 @@ async function restartScraper(retailer) {
     }
 }
 
+function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.textContent = message;
+    
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.classList.add('show');
+    }, 10);
+    
+    setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => {
+            notification.remove();
+        }, 300);
+    }, 5000);
+}
+
+async function openConfigModal() {
+    const modal = document.getElementById('config-modal');
+    const editor = document.getElementById('config-editor');
+    const alertDiv = document.getElementById('modal-alert');
+    
+    alertDiv.style.display = 'none';
+    editor.value = 'Loading configuration...';
+    modal.classList.add('open');
+    
+    try {
+        const response = await fetch('/api/config');
+        const data = await response.json();
+        
+        if (response.ok) {
+            editor.value = data.content;
+        } else {
+            showModalAlert(`Error loading configuration: ${data.error}`, 'error');
+            editor.value = '';
+        }
+    } catch (error) {
+        showModalAlert(`Failed to load configuration: ${error.message}`, 'error');
+        editor.value = '';
+    }
+}
+
+function closeConfigModal() {
+    const modal = document.getElementById('config-modal');
+    modal.classList.remove('open');
+}
+
+async function saveConfig() {
+    const editor = document.getElementById('config-editor');
+    const saveBtn = document.getElementById('save-config-btn');
+    const alertDiv = document.getElementById('modal-alert');
+    
+    const content = editor.value;
+    
+    const validationError = validateConfigSyntax(content);
+    if (validationError) {
+        showModalAlert(validationError, 'error');
+        return;
+    }
+    
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+    alertDiv.style.display = 'none';
+    
+    try {
+        const response = await fetch('/api/config', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                content: content
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            const backupPath = result.backup || 'unknown';
+            showModalAlert(`✅ Configuration saved successfully!\nBackup created at: ${backupPath}`, 'success');
+            showNotification('Configuration updated successfully', 'success');
+            
+            setTimeout(() => {
+                closeConfigModal();
+                updateDashboard();
+            }, 2000);
+        } else {
+            let errorMessage = result.error || 'Unknown error';
+            
+            if (result.details && Array.isArray(result.details)) {
+                errorMessage += '\n\nDetails:\n' + result.details.map(d => `• ${d}`).join('\n');
+            }
+            
+            showModalAlert(`❌ Failed to save configuration:\n${errorMessage}`, 'error');
+        }
+    } catch (error) {
+        showModalAlert(`❌ Failed to save configuration: ${error.message}`, 'error');
+    } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Configuration';
+    }
+}
+
+function validateConfigSyntax(content) {
+    if (!content || content.trim().length === 0) {
+        return 'Configuration cannot be empty';
+    }
+    
+    if (!content.includes('retailers:')) {
+        return 'Configuration must contain "retailers:" key';
+    }
+    
+    const lines = content.split('\n').filter(line => line.trim() && !line.trim().startsWith('#'));
+    if (lines.length < 3) {
+        return 'Configuration appears to be incomplete';
+    }
+    
+    return null;
+}
+
+function showModalAlert(message, type = 'info') {
+    const alertDiv = document.getElementById('modal-alert');
+    alertDiv.className = `alert ${type}`;
+    alertDiv.textContent = message;
+    alertDiv.style.display = 'block';
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     startAutoRefresh(5);
     
@@ -593,6 +722,15 @@ document.addEventListener('DOMContentLoaded', () => {
         logModal.addEventListener('click', function(e) {
             if (e.target === this) {
                 closeLogViewer();
+            }
+        });
+    }
+    
+    const configModal = document.getElementById('config-modal');
+    if (configModal) {
+        configModal.addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeConfigModal();
             }
         });
     }

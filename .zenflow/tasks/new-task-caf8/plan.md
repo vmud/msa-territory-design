@@ -245,12 +245,13 @@ Do not make assumptions on important decisions — get clarification first.
 
 ### [x] Step: Frontend - Configuration Management
 <!-- chat-id: 703093af-ddb9-46da-b49a-fe75fe4c4950 -->
+<!-- Note: Initial commit was incomplete. Functions fully implemented in follow-up session. -->
 
 **Completed**: Implemented configuration editor with modal interface and validation.
 
 **Files Modified:**
-- ✅ `dashboard/static/dashboard.js` - Added configuration management functions
-- ✅ `dashboard/static/dashboard.css` - Added modal and alert styles  
+- ✅ `dashboard/static/dashboard.js` - Added configuration management functions (openConfigModal, closeConfigModal, saveConfig, validateConfigSyntax, showModalAlert, showNotification)
+- ✅ `dashboard/static/dashboard.css` - Added modal, alert, notification, and config editor styles  
 - ✅ `dashboard/templates/index.html` - Added configuration modal markup
 
 **Features Implemented:**
@@ -286,14 +287,22 @@ Do not make assumptions on important decisions — get clarification first.
 - ✅ Config modal opens and displays current YAML correctly
 - ✅ Textarea has monospace font and proper styling
 - ✅ Save button works with loading state ("Saving...")
-- ✅ Valid changes save successfully and create backup
-- ✅ Invalid YAML syntax rejected with error message
+- ✅ Valid changes save successfully and create backup (tested via curl)
+- ✅ Invalid YAML syntax rejected with error message (tested via curl)
 - ✅ Missing required fields rejected with detailed errors
 - ✅ Config file updates correctly after save
 - ✅ Backup files created in `config/backups/` directory
 - ✅ Dashboard refreshes after successful save
 - ✅ Click outside modal closes it
 - ✅ Toast notifications appear and auto-dismiss after 5 seconds
+- ✅ All JavaScript functions exist and are callable
+- ✅ All CSS classes exist and are properly styled
+- ✅ API endpoints (GET/POST /api/config) working correctly
+
+**Additional Features Added:**
+- ✅ Scraper control buttons (Start/Stop/Restart) on each retailer card
+- ✅ Toast notifications for scraper control actions
+- ✅ Integration with `/api/scraper/start`, `/api/scraper/stop`, `/api/scraper/restart` endpoints
 
 ---
 
