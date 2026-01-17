@@ -48,6 +48,8 @@ class ATTStore:
     rating_value: Optional[float]
     rating_count: Optional[int]
     url: str
+    sub_channel: str  # "COR" or "Dealer"
+    dealer_name: Optional[str]  # Dealer name (e.g., "PRIME COMMUNICATIONS") or None for COR
     scraped_at: str
 
     def to_dict(self) -> dict:
@@ -67,6 +69,61 @@ def _check_pause_logic() -> None:
         pause_time = random.uniform(att_config.PAUSE_50_MIN, att_config.PAUSE_50_MAX)
         logging.info(f"Pause after {count} requests: {pause_time:.0f} seconds")
         time.sleep(pause_time)
+
+
+def _extract_store_type_and_dealer(html_content: str) -> tuple:
+    """
+    Extract store type (COR or Dealer) and dealer name from AT&T store page HTML.
+    
+    Looks for JavaScript variables in the page:
+    - topDisplayType: "AT&T Retail" (COR) or "Authorized Retail" (Dealer)
+    - storeMasterDealer: Dealer name with suffix (e.g., "PRIME COMMUNICATIONS - 58")
+    
+    Args:
+        html_content: Raw HTML content of store page
+    
+    Returns:
+        Tuple of (sub_channel, dealer_name)
+        - sub_channel: "COR" or "Dealer"
+        - dealer_name: Dealer name string or None for COR stores
+    """
+    import re
+    
+    # Extract topDisplayType JavaScript variable
+    display_type_match = re.search(
+        r"let\s+topDisplayType\s*=\s*['\"]([^'\"]+)['\"]",
+        html_content
+    )
+    
+    # Extract storeMasterDealer JavaScript variable
+    dealer_match = re.search(
+        r"storeMasterDealer:\s*['\"]([^'\"]+)['\"]",
+        html_content
+    )
+    
+    display_type = display_type_match.group(1) if display_type_match else None
+    dealer_raw = dealer_match.group(1) if dealer_match else None
+    
+    # Determine sub_channel and dealer_name based on display type
+    if display_type == "AT&T Retail":
+        # Corporate store
+        sub_channel = "COR"
+        dealer_name = None
+    elif display_type == "Authorized Retail":
+        # Dealer store
+        sub_channel = "Dealer"
+        # Clean dealer name - remove trailing dash and number suffix (e.g., " - 58")
+        if dealer_raw:
+            dealer_name = re.sub(r'\s*-\s*\d+\s*$', '', dealer_raw)
+        else:
+            dealer_name = None
+    else:
+        # Unable to determine - default to COR
+        logging.debug(f"Unknown display type: {display_type}, defaulting to COR")
+        sub_channel = "COR"
+        dealer_name = None
+    
+    return sub_channel, dealer_name
 
 
 def get_store_urls_from_sitemap(session: requests.Session) -> List[str]:
@@ -145,6 +202,9 @@ def extract_store_details(session: requests.Session, url: str) -> Optional[ATTSt
     try:
         soup = BeautifulSoup(response.text, 'html.parser')
 
+        # Extract store type (COR/Dealer) and dealer name from HTML
+        sub_channel, dealer_name = _extract_store_type_and_dealer(response.text)
+
         # Find all JSON-LD script tags (there may be multiple)
         scripts = soup.find_all('script', type='application/ld+json')
         if not scripts:
@@ -217,10 +277,13 @@ def extract_store_details(session: requests.Session, url: str) -> Optional[ATTSt
             rating_value=rating_value,
             rating_count=rating_count,
             url=url,
+            sub_channel=sub_channel,
+            dealer_name=dealer_name,
             scraped_at=datetime.now().isoformat()
         )
 
-        logging.debug(f"Extracted store: {store.name}")
+        logging.debug(f"Extracted store: {store.name} ({sub_channel}" +
+                     (f" - {dealer_name})" if dealer_name else ")"))
         return store
 
     except Exception as e:

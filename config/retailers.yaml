@@ -108,6 +108,8 @@ retailers:
       - rating_value
       - rating_count
       - url
+      - sub_channel
+      - dealer_name
       - scraped_at
 
   target:
