@@ -70,26 +70,26 @@ Modify `run_retailer_async()` to call scraper entry point and handle output.
 
 ---
 
-### [ ] Step: Update Remaining Scrapers
+### [x] Step: Update Remaining Scrapers
 <!-- chat-id: 4af6e3b5-bd86-45d1-bd53-d585ba333f23 -->
 
 Implement `run()` function in the remaining 5 scrapers.
 
 **Files**:
-- `src/scrapers/bestbuy.py`
-- `src/scrapers/target.py`
-- `src/scrapers/tmobile.py`
-- `src/scrapers/att.py`
-- `src/scrapers/verizon.py`
+- `src/scrapers/bestbuy.py` ✓
+- `src/scrapers/target.py` ✓
+- `src/scrapers/tmobile.py` ✓
+- `src/scrapers/att.py` ✓
+- `src/scrapers/verizon.py` ✓
 
 **Pattern**: Follow walmart.py implementation
-- Use existing helper functions
-- Support limit parameter
-- Return standardized dict
+- Use existing helper functions ✓
+- Support limit parameter ✓
+- Return standardized dict ✓
 
 **Verification**:
-- Syntax check all: `python -m py_compile src/scrapers/*.py`
-- Test each with limit: `python run.py --retailer {name} --limit 5`
+- Syntax check all: `python -m py_compile src/scrapers/*.py` ✓
+- Test each with limit: `python run.py --retailer {name} --limit 5` (to be tested in Integration Testing step)
 
 ---
 
