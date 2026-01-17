@@ -92,7 +92,7 @@ def get_with_retry(
     """Fetch URL with exponential backoff retry and proper error handling
 
     Args:
-        session: requests.Session to use
+        session: requests.Session or ProxyClient to use
         url: URL to fetch
         max_retries: Maximum number of retry attempts
         timeout: Request timeout in seconds
@@ -101,6 +101,8 @@ def get_with_retry(
         max_delay: Maximum delay between requests
         headers_func: Optional function to get headers (for config integration)
     """
+    from src.shared.proxy_client import ProxyClient
+    
     max_retries = max_retries if max_retries is not None else DEFAULT_MAX_RETRIES
     timeout = timeout if timeout is not None else DEFAULT_TIMEOUT
     rate_limit_base_wait = rate_limit_base_wait if rate_limit_base_wait is not None else DEFAULT_RATE_LIMIT_BASE_WAIT
@@ -110,12 +112,21 @@ def get_with_retry(
         headers = headers_func()
     else:
         headers = get_headers()
-    session.headers.update(headers)
+    
+    # Handle both requests.Session and ProxyClient
+    is_proxy_client = isinstance(session, ProxyClient)
+    if not is_proxy_client:
+        session.headers.update(headers)
 
     for attempt in range(max_retries):
         try:
             random_delay(min_delay, max_delay)
-            response = session.get(url, timeout=timeout)
+            
+            # ProxyClient requires headers as a parameter, requests.Session uses session.headers
+            if is_proxy_client:
+                response = session.get(url, headers=headers, timeout=timeout)
+            else:
+                response = session.get(url, timeout=timeout)
 
             if response.status_code == 200:
                 logging.debug(f"Successfully fetched {url}")

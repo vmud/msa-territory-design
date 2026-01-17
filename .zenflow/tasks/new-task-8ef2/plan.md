@@ -48,25 +48,30 @@ Implement the `run()` function in one scraper as a reference implementation.
 
 ---
 
-### [ ] Step: Update run.py Integration
+### [x] Step: Update run.py Integration
+<!-- chat-id: 579dad3d-a2ce-497d-ae68-22bc3a6b5b33 -->
 
 Modify `run_retailer_async()` to call scraper entry point and handle output.
 
 **Changes in** `run.py:194-234`:
-- Call `scraper_module.run(session, retailer_config, **kwargs)`
-- Extract result dict (stores, count)
-- Save outputs using `utils.save_to_json()` and `utils.save_to_csv()`
-- Update return value with actual counts
-- Add error handling
+- Call `scraper_module.run(session, retailer_config, **kwargs)` ✓
+- Extract result dict (stores, count) ✓
+- Save outputs using `utils.save_to_json()` and `utils.save_to_csv()` ✓
+- Update return value with actual counts ✓
+- Add error handling ✓
+
+**Additional fix**:
+- Modified `utils.get_with_retry()` to handle both `requests.Session` and `ProxyClient` objects ✓
 
 **Verification**:
-- Syntax check: `python -m py_compile run.py`
-- Test with walmart: `python run.py --retailer walmart --limit 5 --verbose`
-- Check output files: `ls -lh data/walmart/output/`
+- Syntax check: `python -m py_compile run.py` ✓
+- Test with walmart: `python run.py --retailer walmart --limit 5 --verbose` ✓
+- Integration working correctly (scraper runs, outputs saved)
 
 ---
 
 ### [ ] Step: Update Remaining Scrapers
+<!-- chat-id: 4af6e3b5-bd86-45d1-bd53-d585ba333f23 -->
 
 Implement `run()` function in the remaining 5 scrapers.
 
@@ -89,6 +94,7 @@ Implement `run()` function in the remaining 5 scrapers.
 ---
 
 ### [ ] Step: Add Checkpoint Support
+<!-- chat-id: 402a0bac-b9ef-4ade-b6b7-41f868bcc05f -->
 
 Enhance scrapers with resume capability using existing checkpoint utilities.
 

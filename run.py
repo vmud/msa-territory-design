@@ -205,7 +205,12 @@ async def run_retailer_async(retailer: str, cli_proxy_override: Optional[str] = 
     logging.info(f"[{retailer}] Starting scraper")
 
     try:
-        from src.shared.utils import load_retailer_config, create_proxied_session
+        from src.shared.utils import (
+            load_retailer_config, 
+            create_proxied_session,
+            save_to_json,
+            save_to_csv
+        )
         
         retailer_config = load_retailer_config(retailer, cli_proxy_override)
         
@@ -213,10 +218,36 @@ async def run_retailer_async(retailer: str, cli_proxy_override: Optional[str] = 
         
         scraper_module = get_scraper_module(retailer)
 
+        # Call scraper entry point
+        logging.info(f"[{retailer}] Calling scraper run() function")
+        scraper_result = scraper_module.run(session, retailer_config, **kwargs)
+        
+        # Extract data from scraper result
+        stores = scraper_result.get('stores', [])
+        count = scraper_result.get('count', 0)
+        checkpoints_used = scraper_result.get('checkpoints_used', False)
+        
+        logging.info(f"[{retailer}] Scraper completed: {count} stores")
+        if checkpoints_used:
+            logging.info(f"[{retailer}] Resumed from checkpoint")
+        
+        # Save outputs
+        output_dir = f"data/{retailer}/output"
+        json_path = f"{output_dir}/stores_latest.json"
+        csv_path = f"{output_dir}/stores_latest.csv"
+        
+        save_to_json(stores, json_path)
+        logging.info(f"[{retailer}] Saved JSON to {json_path}")
+        
+        # Get fieldnames from config or use None (will use all keys)
+        fieldnames = retailer_config.get('output_fields')
+        save_to_csv(stores, csv_path, fieldnames=fieldnames)
+        logging.info(f"[{retailer}] Saved CSV to {csv_path}")
+
         result = {
             'retailer': retailer,
             'status': 'completed',
-            'stores': 0,
+            'stores': count,
             'error': None
         }
 
@@ -224,7 +255,7 @@ async def run_retailer_async(retailer: str, cli_proxy_override: Optional[str] = 
         return result
 
     except Exception as e:
-        logging.error(f"[{retailer}] Error running scraper: {e}")
+        logging.error(f"[{retailer}] Error running scraper: {e}", exc_info=True)
         return {
             'retailer': retailer,
             'status': 'error',

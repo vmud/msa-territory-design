@@ -548,3 +548,53 @@ def reset_request_counter() -> None:
 def get_request_count() -> int:
     """Get current request count"""
     return _request_counter.count
+
+
+def run(session, config: dict, **kwargs) -> dict:
+    """Standard scraper entry point.
+    
+    Args:
+        session: Configured session (requests.Session or ProxyClient)
+        config: Retailer configuration dict from retailers.yaml
+        **kwargs: Additional options
+            - resume: bool - Resume from checkpoint
+            - limit: int - Max stores to process
+            - incremental: bool - Only process changes
+    
+    Returns:
+        dict with keys:
+            - stores: List[dict] - Scraped store data
+            - count: int - Number of stores processed
+            - checkpoints_used: bool - Whether resume was used
+    """
+    limit = kwargs.get('limit')
+    
+    reset_request_counter()
+    
+    all_states = get_all_states(session)
+    
+    all_store_urls = []
+    for state in all_states:
+        cities = get_cities_for_state(session, state['url'], state['name'])
+        for city in cities:
+            store_infos = get_stores_for_city(session, city['url'], city['city'], city['state'])
+            all_store_urls.extend([s['url'] for s in store_infos])
+        
+        if limit and len(all_store_urls) >= limit:
+            all_store_urls = all_store_urls[:limit]
+            break
+    
+    if limit:
+        all_store_urls = all_store_urls[:limit]
+    
+    stores = []
+    for url in all_store_urls:
+        store_data = extract_store_details(session, url)
+        if store_data:
+            stores.append(store_data)
+    
+    return {
+        'stores': stores,
+        'count': len(stores),
+        'checkpoints_used': False
+    }
