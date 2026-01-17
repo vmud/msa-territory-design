@@ -691,3 +691,83 @@ def reset_request_counter() -> None:
 def get_request_count() -> int:
     """Get current request count"""
     return _request_counter.count
+
+
+def run(session, config: dict, **kwargs) -> dict:
+    """Standard scraper entry point.
+    
+    Args:
+        session: Configured session (requests.Session or ProxyClient)
+        config: Retailer configuration dict from retailers.yaml
+        **kwargs: Additional options
+            - resume: bool - Resume from checkpoint
+            - limit: int - Max stores to process
+            - incremental: bool - Only process changes
+    
+    Returns:
+        dict with keys:
+            - stores: List[dict] - Scraped store data
+            - count: int - Number of stores processed
+            - checkpoints_used: bool - Whether resume was used
+    """
+    limit = kwargs.get('limit')
+    resume = kwargs.get('resume', False)
+    
+    reset_request_counter()
+    
+    retailer_name = kwargs.get('retailer', 'bestbuy')
+    checkpoint_path = f"data/{retailer_name}/checkpoints/scrape_progress.json"
+    checkpoint_interval = config.get('checkpoint_interval', 100)
+    
+    stores = []
+    completed_urls = set()
+    checkpoints_used = False
+    
+    if resume:
+        checkpoint = utils.load_checkpoint(checkpoint_path)
+        if checkpoint:
+            stores = checkpoint.get('stores', [])
+            completed_urls = set(checkpoint.get('completed_urls', []))
+            logging.info(f"Resuming from checkpoint: {len(stores)} stores already collected")
+            checkpoints_used = True
+    
+    store_list = get_all_store_ids(session)
+    remaining_stores = [s for s in store_list if s.get('url') not in completed_urls]
+    
+    if limit:
+        total_needed = limit - len(stores)
+        if total_needed > 0:
+            remaining_stores = remaining_stores[:total_needed]
+        else:
+            remaining_stores = []
+    
+    for i, store_info in enumerate(remaining_stores):
+        store_url = store_info.get('url')
+        store_obj = extract_store_details(session, store_url)
+        if store_obj:
+            stores.append(store_obj.to_dict())
+            completed_urls.add(store_url)
+        
+        if (i + 1) % checkpoint_interval == 0:
+            utils.save_checkpoint({
+                'completed_count': len(stores),
+                'completed_urls': list(completed_urls),
+                'stores': stores,
+                'last_updated': datetime.now().isoformat()
+            }, checkpoint_path)
+            logging.info(f"Checkpoint saved: {len(stores)} stores processed")
+    
+    if stores:
+        utils.save_checkpoint({
+            'completed_count': len(stores),
+            'completed_urls': list(completed_urls),
+            'stores': stores,
+            'last_updated': datetime.now().isoformat()
+        }, checkpoint_path)
+        logging.info(f"Final checkpoint saved: {len(stores)} stores total")
+    
+    return {
+        'stores': stores,
+        'count': len(stores),
+        'checkpoints_used': checkpoints_used
+    }

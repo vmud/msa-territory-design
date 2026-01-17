@@ -548,3 +548,91 @@ def reset_request_counter() -> None:
 def get_request_count() -> int:
     """Get current request count"""
     return _request_counter.count
+
+
+def run(session, config: dict, **kwargs) -> dict:
+    """Standard scraper entry point.
+    
+    Args:
+        session: Configured session (requests.Session or ProxyClient)
+        config: Retailer configuration dict from retailers.yaml
+        **kwargs: Additional options
+            - resume: bool - Resume from checkpoint
+            - limit: int - Max stores to process
+            - incremental: bool - Only process changes
+    
+    Returns:
+        dict with keys:
+            - stores: List[dict] - Scraped store data
+            - count: int - Number of stores processed
+            - checkpoints_used: bool - Whether resume was used
+    """
+    limit = kwargs.get('limit')
+    resume = kwargs.get('resume', False)
+    
+    reset_request_counter()
+    
+    retailer_name = kwargs.get('retailer', 'verizon')
+    checkpoint_path = f"data/{retailer_name}/checkpoints/scrape_progress.json"
+    # Verizon uses smaller interval (10) due to slower multi-phase crawl
+    checkpoint_interval = config.get('checkpoint_interval', 10)
+    
+    stores = []
+    completed_urls = set()
+    checkpoints_used = False
+    
+    if resume:
+        checkpoint = utils.load_checkpoint(checkpoint_path)
+        if checkpoint:
+            stores = checkpoint.get('stores', [])
+            completed_urls = set(checkpoint.get('completed_urls', []))
+            logging.info(f"Resuming from checkpoint: {len(stores)} stores already collected")
+            checkpoints_used = True
+    
+    all_states = get_all_states(session)
+    
+    all_store_urls = []
+    for state in all_states:
+        cities = get_cities_for_state(session, state['url'], state['name'])
+        for city in cities:
+            store_infos = get_stores_for_city(session, city['url'], city['city'], city['state'])
+            all_store_urls.extend([s['url'] for s in store_infos])
+    
+    remaining_urls = [url for url in all_store_urls if url not in completed_urls]
+    
+    if limit:
+        total_needed = limit - len(stores)
+        if total_needed > 0:
+            remaining_urls = remaining_urls[:total_needed]
+        else:
+            remaining_urls = []
+    
+    for i, url in enumerate(remaining_urls):
+        store_data = extract_store_details(session, url)
+        if store_data:
+            stores.append(store_data)
+            completed_urls.add(url)
+        
+        if (i + 1) % checkpoint_interval == 0:
+            utils.save_checkpoint({
+                'completed_count': len(stores),
+                'completed_urls': list(completed_urls),
+                'stores': stores,
+                'last_updated': datetime.now().isoformat()
+            }, checkpoint_path)
+            logging.info(f"Checkpoint saved: {len(stores)} stores processed")
+    
+    if stores:
+        utils.save_checkpoint({
+            'completed_count': len(stores),
+            'completed_urls': list(completed_urls),
+            'stores': stores,
+            'last_updated': datetime.now().isoformat()
+        }, checkpoint_path)
+        logging.info(f"Final checkpoint saved: {len(stores)} stores total")
+    
+    return {
+        'stores': stores,
+        'count': len(stores),
+        'checkpoints_used': checkpoints_used
+    }
