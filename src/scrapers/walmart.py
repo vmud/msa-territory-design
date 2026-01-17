@@ -344,6 +344,15 @@ def run(session, config: dict, **kwargs) -> dict:
             }, checkpoint_path)
             logging.info(f"Checkpoint saved: {len(stores)} stores processed")
     
+    if stores:
+        utils.save_checkpoint({
+            'completed_count': len(stores),
+            'completed_urls': list(completed_urls),
+            'stores': stores,
+            'last_updated': datetime.now().isoformat()
+        }, checkpoint_path)
+        logging.info(f"Final checkpoint saved: {len(stores)} stores total")
+    
     return {
         'stores': stores,
         'count': len(stores),

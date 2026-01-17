@@ -108,19 +108,27 @@ Enhance scrapers with resume capability using existing checkpoint utilities.
 - `att.py` - Sitemap-based with URL tracking
 - `tmobile.py` - Sitemap-based with URL tracking
 - `target.py` - API-based with store ID tracking
-- `verizon.py` - Multi-phase crawl with URL tracking
+- `verizon.py` - Multi-phase crawl with URL tracking (fixed early limit enforcement)
 - `bestbuy.py` - Sitemap-based with URL tracking
 
 **Implementation**:
 - Load checkpoint on resume (`resume=True`)
 - Track completed URLs/IDs to skip already processed items
 - Save checkpoint every N stores (config `checkpoint_interval`, default 100)
+- Save final checkpoint after loop completes (prevents data loss)
 - Checkpoint format: `{completed_count, completed_urls/completed_ids, stores, last_updated}`
 - Checkpoint path: `data/{retailer}/checkpoints/scrape_progress.json`
+- Verizon uses smaller interval (10) due to slower multi-phase crawl
+
+**Fixes Applied**:
+- Added final checkpoint save to all scrapers (prevents incomplete checkpoint state)
+- Removed verizon early limit enforcement (allows proper resume with failed URLs)
+- Added explanatory comment for verizon's different checkpoint interval
 
 **Verification**:
 - Syntax check: `python -m py_compile src/scrapers/*.py` ✓
-- Checkpoint save/load test: Passed ✓
+- Checkpoint save/load utility test: Passed ✓
+- Runtime checkpoint/resume testing: Deferred to Integration Testing step
 
 ---
 

@@ -574,6 +574,7 @@ def run(session, config: dict, **kwargs) -> dict:
     
     retailer_name = config.get('name', 'verizon').lower()
     checkpoint_path = f"data/{retailer_name}/checkpoints/scrape_progress.json"
+    # Verizon uses smaller interval (10) due to slower multi-phase crawl
     checkpoint_interval = config.get('checkpoint_interval', 10)
     
     stores = []
@@ -596,13 +597,6 @@ def run(session, config: dict, **kwargs) -> dict:
         for city in cities:
             store_infos = get_stores_for_city(session, city['url'], city['city'], city['state'])
             all_store_urls.extend([s['url'] for s in store_infos])
-        
-        if limit and len(all_store_urls) >= limit:
-            all_store_urls = all_store_urls[:limit]
-            break
-    
-    if limit:
-        all_store_urls = all_store_urls[:limit]
     
     remaining_urls = [url for url in all_store_urls if url not in completed_urls]
     
@@ -627,6 +621,15 @@ def run(session, config: dict, **kwargs) -> dict:
                 'last_updated': datetime.now().isoformat()
             }, checkpoint_path)
             logging.info(f"Checkpoint saved: {len(stores)} stores processed")
+    
+    if stores:
+        utils.save_checkpoint({
+            'completed_count': len(stores),
+            'completed_urls': list(completed_urls),
+            'stores': stores,
+            'last_updated': datetime.now().isoformat()
+        }, checkpoint_path)
+        logging.info(f"Final checkpoint saved: {len(stores)} stores total")
     
     return {
         'stores': stores,
