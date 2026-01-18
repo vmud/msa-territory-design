@@ -11,6 +11,9 @@ aiofiles>=23.2.0
 # Dashboard
 flask>=3.0.0
 
+# Export formats
+openpyxl>=3.1.0  # Excel export support
+
 # Configuration
 pyyaml>=6.0.0
 python-dotenv>=1.0.0  # Load .env file for environment variables
