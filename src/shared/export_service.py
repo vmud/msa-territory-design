@@ -228,7 +228,7 @@ class ExportService:
                     # GeoJSON uses [longitude, latitude] order
                     "coordinates": [lng_float, lat_float]
                 },
-                "properties": {k: v for k, v in store.items()}
+                "properties": dict(store.items())
             }
             features.append(feature)
 
