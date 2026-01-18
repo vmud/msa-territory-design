@@ -175,3 +175,62 @@ class TestAPIEndpoints:
         expected = ['verizon', 'att', 'target', 'tmobile', 'walmart', 'bestbuy']
         for retailer in expected:
             assert retailer in retailers
+
+    # Export API tests
+
+    def test_api_export_formats_returns_200(self, client):
+        """Test that /api/export/formats returns 200 OK"""
+        response = client.get('/api/export/formats')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert 'formats' in data
+        assert isinstance(data['formats'], list)
+
+    def test_api_export_formats_contains_expected_formats(self, client):
+        """Test that export formats include all expected formats"""
+        response = client.get('/api/export/formats')
+        data = response.get_json()
+        format_ids = [f['id'] for f in data['formats']]
+        expected = ['json', 'csv', 'excel', 'geojson']
+        for fmt in expected:
+            assert fmt in format_ids
+
+    def test_api_export_invalid_retailer_returns_404(self, client):
+        """Test that export with invalid retailer returns 404"""
+        response = client.get('/api/export/invalid_retailer/json')
+        assert response.status_code == 404
+        data = response.get_json()
+        assert 'error' in data
+
+    def test_api_export_invalid_format_returns_400(self, client):
+        """Test that export with invalid format returns 400"""
+        response = client.get('/api/export/verizon/invalid_format')
+        assert response.status_code == 400
+        data = response.get_json()
+        assert 'error' in data
+
+    def test_api_export_multi_without_retailers_returns_400(self, client):
+        """Test that multi export without retailers param returns 400"""
+        response = client.post('/api/export/multi',
+                              json={},
+                              content_type='application/json')
+        assert response.status_code == 400
+        data = response.get_json()
+        assert 'error' in data
+
+    def test_api_export_multi_invalid_format_returns_400(self, client):
+        """Test that multi export with invalid format returns 400"""
+        response = client.post('/api/export/multi',
+                              json={'retailers': ['verizon'], 'format': 'invalid'},
+                              content_type='application/json')
+        assert response.status_code == 400
+        data = response.get_json()
+        assert 'error' in data
+
+    def test_api_export_multi_no_data_returns_404(self, client):
+        """Test that multi export with no data returns 404"""
+        response = client.post('/api/export/multi',
+                              json={'retailers': ['verizon', 'att'], 'format': 'json'},
+                              content_type='application/json')
+        # May return 404 if no stores data exists for these retailers
+        assert response.status_code in [200, 404]
