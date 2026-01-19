@@ -32,7 +32,25 @@
       "Bash(npx playwright install:*)",
       "mcp__kapture__new_tab",
       "mcp__kapture__elements",
-      "mcp__kapture__console_logs"
+      "mcp__kapture__console_logs",
+      "Bash(gh pr view:*)",
+      "Bash(git fetch:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(wc:*)",
+      "Bash(pytest:*)",
+      "Bash(grep:*)",
+      "Bash(cut:*)",
+      "Bash(gh label list:*)",
+      "Bash(gh issue list:*)",
+      "Bash(gh issue view:*)",
+      "Bash(gh label create:*)",
+      "Bash(gh issue create --title \"Bug: Zero coordinates converted to empty strings in BestBuy scraper\" --label \"bug,critical\" --body \"$\\(cat <<''EOF''\n## Summary\nThe BestBuy scraper incorrectly converts valid zero coordinates \\(0.0 latitude or longitude\\) to empty strings, potentially corrupting geographic data for stores near the prime meridian or equator.\n\n## Location\n- `src/scrapers/bestbuy.py:496-505`\n- `src/scrapers/bestbuy.py:79-87`\n\n## Current Behavior\n```python\n# At line 496-505 \\(extract_store_data_from_json\\)\ngeo = data.get\\(''geo'', {}\\)\nlatitude = geo.get\\(''latitude'', ''''\\)\nlongitude = geo.get\\(''longitude'', ''''\\)\n\n# Convert coordinates to strings\nif latitude:  # <-- Treats 0.0 as falsy\n    latitude = str\\(latitude\\)\nif longitude:  # <-- Treats 0.0 as falsy\n    longitude = str\\(longitude\\)\n```\n\nAnd similarly at lines 79-87:\n```python\nif result.get\\(''latitude''\\) is None:\n    result[''latitude''] = ''''\nelse:\n    result[''latitude''] = str\\(result[''latitude'']\\)\n```\n\n## Expected Behavior\nZero coordinates \\(0.0\\) should be preserved as valid values, not converted to empty strings. The condition should check for `None` explicitly:\n\n```python\nif latitude is not None:\n    latitude = str\\(latitude\\)\nif longitude is not None:\n    longitude = str\\(longitude\\)\n```\n\n## Impact\n- Stores with coordinates at or near the equator \\(lat=0\\) or prime meridian \\(lon=0\\) would have missing coordinates\n- GeoJSON export would fail for these stores\n- While rare for US Best Buy stores, this is a data integrity issue\n\n## Recommended Fix\nReplace falsy checks with explicit `is not None` checks in both locations.\nEOF\n\\)\")",
+      "Bash(gh issue create:*)",
+      "Bash(__NEW_LINE_0685ae918b7c1284__ In development, Vite serves files directly. This route allows)",
+      "Bash(Flask to serve source files when running without Vite dev server.)",
+      "Bash(gh issue close:*)",
+      "Bash(gh issue edit:*)"
     ]
   }
 }

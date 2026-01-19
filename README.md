@@ -13,6 +13,10 @@ A scalable Python web scraper that collects retail store locations from multiple
 - **Systemd Integration**: Persistent service for Linux servers
 - **Web Dashboard**: Real-time monitoring with soft dark theme UI
 
+## Agent Guide
+
+Need contributor-specific instructions? See [`AGENTS.md`](AGENTS.md) for structure, workflows, and coding standards tailored to automation agents.
+
 ## Quick Start
 
 ### Installation
