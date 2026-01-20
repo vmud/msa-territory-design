@@ -349,6 +349,7 @@ async function loadRunHistory(retailer) {
         }
         
         listContainer.innerHTML = data.runs.map(run => createRunItem(retailer, run)).join('');
+        bindRunHistoryLogButtons(listContainer);
     } catch (error) {
         console.error('Error loading run history:', error);
         listContainer.innerHTML = `<div class="run-history-empty">Failed to load run history</div>`;
@@ -377,11 +378,10 @@ function createRunItem(retailer, run) {
         statusText = 'Running';
     }
 
-    // SECURITY: Escape retailer and runId for use in onclick handlers to prevent XSS (#120)
-    // These values come from server data and could potentially contain malicious content
-    // Use escapeForJs which properly escapes backslashes before quotes
-    const safeRetailer = escapeForJs(retailer);
-    const safeRunId = escapeForJs(runId);
+    // SECURITY: Store server data in data-* attributes and bind clicks separately.
+    // This avoids inline JS and prevents attribute breakout.
+    const safeRetailerAttr = escapeHtml(retailer);
+    const safeRunIdAttr = escapeHtml(runId);
     const safeStatus = escapeHtml(status);
     const safeStatusClass = escapeHtml(statusClass);
     const safeStatusText = escapeHtml(statusText);
@@ -399,12 +399,23 @@ function createRunItem(retailer, run) {
                 Stores: ${formatNumber(stores)}
             </div>
             <div class="run-item-actions">
-                <button class="btn-view-logs" onclick="openLogViewer('${safeRetailer}', '${safeRunId}')">
+                <button class="btn-view-logs" data-retailer="${safeRetailerAttr}" data-run-id="${safeRunIdAttr}">
                     View Logs
                 </button>
             </div>
         </div>
     `;
+}
+
+function bindRunHistoryLogButtons(listContainer) {
+    const buttons = listContainer.querySelectorAll('.btn-view-logs');
+    buttons.forEach(button => {
+        button.addEventListener('click', () => {
+            const retailer = button.dataset.retailer;
+            const runId = button.dataset.runId;
+            openLogViewer(retailer, runId);
+        });
+    });
 }
 
 function openLogViewer(retailer, runId) {
@@ -491,21 +502,6 @@ function escapeHtml(str) {
         "'": '&#039;'
     };
     return String(str).replace(/[&<>"']/g, m => map[m]);
-}
-
-/**
- * Escape a string for safe use in JavaScript string literals within HTML attributes
- * Prevents XSS via backslash injection (#120)
- * @param {string} str - The string to escape
- * @returns {string} - The escaped string safe for JS onclick handlers
- */
-function escapeForJs(str) {
-    return String(str)
-        .replace(/\\/g, '\\\\')  // Escape backslashes FIRST
-        .replace(/\n/g, '\\n')   // Escape newlines
-        .replace(/\r/g, '\\r')   // Escape carriage returns
-        .replace(/'/g, "\\'")
-        .replace(/"/g, '\\"');
 }
 
 function displayLogs(parsedLines) {
