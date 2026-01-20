@@ -55,9 +55,15 @@ def setup_logging(log_file: str = "logs/scraper.log", max_bytes: int = 10*1024*1
     root_logger = logging.getLogger()
     log_path = Path(log_file)
 
-    # Idempotency check: skip if handlers already configured for this specific file
-    if any(isinstance(h, RotatingFileHandler) and h.baseFilename == str(log_path.absolute()) for h in root_logger.handlers):
-        return
+    # Idempotency check: skip if handler exists with matching configuration
+    for handler in root_logger.handlers[:]:  # Copy list to allow modification during iteration
+        if isinstance(handler, RotatingFileHandler) and handler.baseFilename == str(log_path.absolute()):
+            # Check if configuration matches
+            if handler.maxBytes == max_bytes and handler.backupCount == backup_count:
+                return  # Already configured correctly
+            # Configuration mismatch - remove old handler to reconfigure
+            root_logger.removeHandler(handler)
+            handler.close()
 
     # Ensure log directory exists
     log_path.parent.mkdir(parents=True, exist_ok=True)
