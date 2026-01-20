@@ -1,9 +1,9 @@
 #!/bin/bash
 #
-# rsync Deployment Script
+# Simple rsync Deployment Script (No sudo required)
 # Syncs files from workstation to remote dev server
 #
-# Usage: ./deploy/rsync-deploy.sh user@dev-server-ip [destination-path]
+# Usage: ./deploy/rsync-deploy-simple.sh user@dev-server-ip [destination-path]
 #
 
 set -e
@@ -25,27 +25,26 @@ if [ $# -lt 1 ]; then
     echo ""
     echo "Examples:"
     echo "  $0 ubuntu@192.168.1.100"
-    echo "  $0 ubuntu@192.168.1.100 /opt/retail-store-scraper"
+    echo "  $0 ubuntu@192.168.1.100 ~/retail-store-scraper"
     exit 1
 fi
 
 REMOTE_HOST="$1"
-REMOTE_PATH="${2:-/opt/retail-store-scraper}"
+REMOTE_PATH="${2:-~/retail-store-scraper}"
 
-# Extract remote username from REMOTE_HOST (format: user@host)
-REMOTE_USER="${REMOTE_HOST%%@*}"
-if [[ "$REMOTE_USER" == "$REMOTE_HOST" ]]; then
-    # No @ found, use current user
-    REMOTE_USER="$USER"
+# Expand tilde in remote path
+if [[ "$REMOTE_PATH" == "~/"* ]]; then
+    REMOTE_PATH_EXPANDED=$(ssh "$REMOTE_HOST" "echo $REMOTE_PATH")
+else
+    REMOTE_PATH_EXPANDED="$REMOTE_PATH"
 fi
 
 echo "=========================================="
-echo "rsync Deployment Script"
+echo "Simple rsync Deployment (No sudo)"
 echo "=========================================="
 echo ""
 echo "Source:      $REPO_DIR"
 echo "Destination: $REMOTE_HOST:$REMOTE_PATH"
-echo "Remote User: $REMOTE_USER"
 echo ""
 
 # Confirm before proceeding
@@ -69,30 +68,17 @@ else
     exit 1
 fi
 
-# Create remote directory if it doesn't exist
+# Create remote directory (no sudo)
 echo -e "${YELLOW}Creating remote directory...${NC}"
-# Try without sudo first (user may have permissions)
-if ssh "$REMOTE_HOST" "mkdir -p $REMOTE_PATH" 2>/dev/null; then
-    echo -e "${GREEN}✓ Created directory without sudo${NC}"
+if ssh "$REMOTE_HOST" "mkdir -p $REMOTE_PATH"; then
+    echo -e "${GREEN}✓ Remote directory ready${NC}"
 else
-    # Fall back to sudo if needed
-    echo -e "${YELLOW}  Trying with sudo (you may be prompted for password)...${NC}"
-    if ssh "$REMOTE_HOST" "sudo mkdir -p $REMOTE_PATH && sudo chown $REMOTE_USER:$REMOTE_USER $REMOTE_PATH"; then
-        echo -e "${GREEN}✓ Created directory with sudo${NC}"
-    else
-        echo -e "${RED}✗ Failed to create remote directory${NC}"
-        echo ""
-        echo "Troubleshooting:"
-        echo "  1. Check if you have sudo access on the remote server"
-        echo "  2. Try creating the directory manually:"
-        echo "     ssh $REMOTE_HOST 'sudo mkdir -p $REMOTE_PATH'"
-        echo "     ssh $REMOTE_HOST 'sudo chown $REMOTE_USER:$REMOTE_USER $REMOTE_PATH'"
-        echo "  3. Or use a directory where you have write permissions:"
-        echo "     ./deploy/rsync-deploy.sh $REMOTE_HOST ~/retail-store-scraper"
-        exit 1
-    fi
+    echo -e "${RED}✗ Failed to create remote directory${NC}"
+    echo ""
+    echo "Error: Cannot create $REMOTE_PATH"
+    echo "Please ensure you have write permissions to the parent directory."
+    exit 1
 fi
-echo -e "${GREEN}✓ Remote directory ready${NC}"
 
 # Sync files
 echo -e "${YELLOW}Syncing files...${NC}"
@@ -121,14 +107,6 @@ rsync -avz --progress \
 
 echo -e "${GREEN}✓ Files synced successfully${NC}"
 
-# Set permissions
-echo -e "${YELLOW}Setting permissions...${NC}"
-if ssh "$REMOTE_HOST" "chmod -R 755 $REMOTE_PATH" 2>/dev/null; then
-    echo -e "${GREEN}✓ Permissions set${NC}"
-else
-    echo -e "${YELLOW}⚠ Warning: Failed to set some permissions (may be non-critical)${NC}"
-fi
-
 echo ""
 echo "=========================================="
 echo -e "${GREEN}Deployment Complete!${NC}"
@@ -139,23 +117,24 @@ echo ""
 echo "1. SSH into the server:"
 echo "   ssh $REMOTE_HOST"
 echo ""
-echo "2. Configure environment:"
+echo "2. Navigate to deployment directory:"
 echo "   cd $REMOTE_PATH"
+echo ""
+echo "3. Configure environment:"
 echo "   cp .env.example .env"
 echo "   nano .env  # Add your credentials"
 echo ""
-echo "3. Deploy using Docker:"
+echo "4. Deploy using Docker:"
 echo "   docker compose build"
 echo "   docker compose up -d"
 echo ""
-echo "4. Or deploy using Python:"
+echo "5. Or deploy using Python:"
 echo "   python3.11 -m venv venv"
 echo "   source venv/bin/activate"
 echo "   pip install -r requirements.txt"
 echo "   python run.py --all --test"
 echo ""
-echo "5. Access dashboard:"
+echo "6. Access dashboard:"
 echo "   http://$REMOTE_HOST:5001"
-echo ""
-echo "For detailed instructions, see DEPLOYMENT.md"
+echo "   (Or use SSH tunnel: ssh -L 5001:localhost:5001 $REMOTE_HOST)"
 echo ""
