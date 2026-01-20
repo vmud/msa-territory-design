@@ -28,7 +28,7 @@ from flask_wtf.csrf import CSRFProtect, generate_csrf
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from src.shared import status, scraper_manager, run_tracker
-from src.shared.export_service import ExportService, ExportFormat
+from src.shared.export_service import ExportService, ExportFormat, sanitize_csv_value
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 
@@ -1052,6 +1052,8 @@ STREAMING_THRESHOLD = 50 * 1024 * 1024
 def generate_csv_stream(stores_file: Path, fieldnames: list = None):
     """Generate CSV content as a stream for large files (#74).
 
+    Uses ijson for memory-efficient streaming of large JSON files.
+
     Args:
         stores_file: Path to JSON file containing stores
         fieldnames: Optional list of fields to include
@@ -1061,16 +1063,16 @@ def generate_csv_stream(stores_file: Path, fieldnames: list = None):
     """
     import csv
     import io
+    import ijson
 
-    with open(stores_file, 'r', encoding='utf-8') as f:
-        stores = json.load(f)
-
-    if not stores:
-        return
-
-    # Determine fieldnames
+    # First pass: get fieldnames from first item if not provided
     if not fieldnames:
-        fieldnames = list(stores[0].keys())
+        with open(stores_file, 'rb') as f:
+            for first_item in ijson.items(f, 'item'):
+                fieldnames = list(first_item.keys())
+                break
+        if not fieldnames:
+            return  # Empty file
 
     # Yield header
     output = io.StringIO()
@@ -1078,19 +1080,27 @@ def generate_csv_stream(stores_file: Path, fieldnames: list = None):
     writer.writeheader()
     yield output.getvalue()
 
-    # Yield rows in chunks
+    # Stream items using ijson (memory-efficient)
+    chunk = []
     chunk_size = 100
-    for i in range(0, len(stores), chunk_size):
+    with open(stores_file, 'rb') as f:
+        for store in ijson.items(f, 'item'):
+            # Sanitize CSV values using shared sanitizer to prevent formula injection
+            sanitized = {k: sanitize_csv_value(v) for k, v in store.items()}
+            chunk.append(sanitized)
+
+            if len(chunk) >= chunk_size:
+                output = io.StringIO()
+                writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction='ignore')
+                writer.writerows(chunk)
+                yield output.getvalue()
+                chunk = []
+
+    # Yield remaining items
+    if chunk:
         output = io.StringIO()
         writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction='ignore')
-        for store in stores[i:i + chunk_size]:
-            # Sanitize CSV values to prevent formula injection
-            sanitized = {}
-            for k, v in store.items():
-                if isinstance(v, str) and v and v[0] in ('=', '+', '-', '@', '\t', '\n'):
-                    v = "'" + v
-                sanitized[k] = v
-            writer.writerow(sanitized)
+        writer.writerows(chunk)
         yield output.getvalue()
 
 

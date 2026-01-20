@@ -498,11 +498,12 @@ async def run_all_retailers(
     return summary
 
 
-def validate_cli_options(args) -> List[str]:
+def validate_cli_options(args, config: dict = None) -> List[str]:
     """Validate CLI options for conflicts (#106).
 
     Args:
         args: Parsed command line arguments
+        config: Loaded YAML configuration (optional, for proxy mode check)
 
     Returns:
         List of validation errors (empty if options are valid)
@@ -513,8 +514,14 @@ def validate_cli_options(args) -> List[str]:
     if args.test and args.limit:
         errors.append("Cannot use --test with --limit (--test already sets limit to 10)")
 
-    if args.render_js and args.proxy != 'web_scraper_api':
-        errors.append("--render-js requires --proxy web_scraper_api")
+    # --render-js requires web_scraper_api proxy mode (CLI or YAML config)
+    if args.render_js:
+        yaml_proxy_mode = None
+        if config:
+            yaml_proxy_mode = config.get('proxy', {}).get('mode')
+        # Allow if CLI specifies web_scraper_api OR YAML config has web_scraper_api
+        if args.proxy != 'web_scraper_api' and yaml_proxy_mode != 'web_scraper_api':
+            errors.append("--render-js requires --proxy web_scraper_api (or proxy.mode: web_scraper_api in config)")
 
     # Validate limit range
     if args.limit is not None and args.limit < 1:
@@ -551,8 +558,12 @@ def main():
             print(f"  - {error}")
         return 1
 
+    # Load config for CLI validation (need to check YAML proxy mode for --render-js)
+    with open("config/retailers.yaml", 'r', encoding='utf-8') as f:
+        loaded_config = yaml.safe_load(f) or {}
+
     # Validate CLI options (#106)
-    cli_errors = validate_cli_options(args)
+    cli_errors = validate_cli_options(args, loaded_config)
     if cli_errors:
         print("Invalid command line options:")
         for error in cli_errors:
@@ -651,8 +662,9 @@ def main():
 
     # Get CLI proxy override and settings (#52)
     cli_proxy_override = args.proxy if args.proxy else None
+    # Pass proxy settings if CLI override OR if render_js is set (can use YAML proxy)
     cli_proxy_settings = None
-    if cli_proxy_override:
+    if cli_proxy_override or args.render_js or args.proxy_country:
         cli_proxy_settings = {
             'country_code': args.proxy_country,
             'render_js': args.render_js,

@@ -51,9 +51,13 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV LOG_LEVEL=INFO
 
+# Expose dashboard port
+EXPOSE 5001
+
 # Health check for dashboard (#115)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:5001/api/status || exit 1
 
-# Default command - run all scrapers with resume
-CMD ["python", "run.py", "--all", "--resume"]
+# Default command - start the dashboard (aligns with healthcheck)
+# Override with: docker run <image> python run.py --all --resume
+CMD ["python", "dashboard/app.py"]
