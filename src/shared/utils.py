@@ -803,7 +803,7 @@ def get_with_proxy(
 
 def create_proxied_session(
     retailer_config: Optional[Dict[str, Any]] = None
-) -> Union[requests.Session, ProxiedSession]:
+) -> Union[requests.Session, "ProxiedSession"]:
     """
     Create a session-like object that can be used as a drop-in replacement
     for requests.Session in existing scrapers.
