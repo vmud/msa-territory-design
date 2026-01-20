@@ -512,7 +512,8 @@ function escapeHtml(str) {
  */
 function escapeForJs(str) {
     // Step 1: Escape for JavaScript string literal context
-    const jsEscaped = String(str)
+function escapeForJs(str) {
+    // Step 1: Escape for JavaScript string literal context
     const jsEscaped = String(str)
         .replace(/\\/g, '\\\\')  // Escape backslashes FIRST
         .replace(/\n/g, '\\n')   // Escape newlines
