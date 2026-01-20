@@ -121,7 +121,8 @@ def require_api_key(f):
         provided_key = request.headers.get('X-API-Key')
         if not provided_key:
             return jsonify({'error': 'Missing X-API-Key header'}), 401
-        if provided_key != api_key_configured:
+        # Use constant-time comparison to prevent timing attacks
+        if not secrets.compare_digest(provided_key, api_key_configured):
             return jsonify({'error': 'Invalid API key'}), 401
 
         return f(*args, **kwargs)

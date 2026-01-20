@@ -504,6 +504,25 @@ function escapeHtml(str) {
     return String(str).replace(/[&<>"']/g, m => map[m]);
 }
 
+/**
+ * Escape a string for safe use in JavaScript string literals within HTML attributes
+ * Prevents XSS via backslash injection and HTML context escaping (#120)
+ * @param {string} str - The string to escape
+ * @returns {string} - The escaped string safe for JS onclick handlers
+ */
+function escapeForJs(str) {
+    // Step 1: Escape for JavaScript string literal context
+    const jsEscaped = String(str)
+        .replace(/\\/g, '\\\\')  // Escape backslashes FIRST
+        .replace(/\n/g, '\\n')   // Escape newlines
+        .replace(/\r/g, '\\r')   // Escape carriage returns
+        .replace(/'/g, "\\'")
+        .replace(/"/g, '\\"');
+    
+    // Step 2: HTML-encode for HTML attribute context
+    // This prevents XSS when the escaped string is placed in onclick="..."
+    return escapeHtml(jsEscaped);
+}
 function displayLogs(parsedLines) {
     const logContainer = document.getElementById('log-content');
     
