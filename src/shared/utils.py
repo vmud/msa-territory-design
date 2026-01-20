@@ -53,14 +53,13 @@ def setup_logging(log_file: str = "logs/scraper.log", max_bytes: int = 10*1024*1
     from logging.handlers import RotatingFileHandler
 
     root_logger = logging.getLogger()
+    log_path = Path(log_file)
 
-    # Idempotency check: skip if handlers already configured
     # Idempotency check: skip if handlers already configured for this specific file
     if any(isinstance(h, RotatingFileHandler) and h.baseFilename == str(log_path.absolute()) for h in root_logger.handlers):
         return
 
     # Ensure log directory exists
-    log_path = Path(log_file)
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Configure logging with rotating file handler (#118)
