@@ -55,7 +55,8 @@ def setup_logging(log_file: str = "logs/scraper.log", max_bytes: int = 10*1024*1
     root_logger = logging.getLogger()
 
     # Idempotency check: skip if handlers already configured
-    if root_logger.handlers:
+    # Idempotency check: skip if handlers already configured for this specific file
+    if any(isinstance(h, RotatingFileHandler) and h.baseFilename == str(log_path.absolute()) for h in root_logger.handlers):
         return
 
     # Ensure log directory exists
