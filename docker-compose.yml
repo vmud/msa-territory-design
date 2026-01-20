@@ -3,7 +3,9 @@ services:
   scraper:
     build: .
     container_name: retail-scraper
-    command: ["python", "run.py", "--all", "--resume"]
+    # Container stays running but doesn't auto-start scraping
+    # Start manually via dashboard or: docker compose exec scraper python run.py --all
+    command: ["tail", "-f", "/dev/null"]
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
