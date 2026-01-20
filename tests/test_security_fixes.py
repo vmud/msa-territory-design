@@ -77,7 +77,7 @@ class TestXSSPrevention:
         pass
 
     def test_xss_payload_is_neutralized(self):
-        """Test that common XSS payloads are neutralized."""
+        """Test that XSS payloads are neutralized using data attributes (better approach)."""
         # Example payloads that should be safely escaped
         xss_payloads = [
             "<script>alert('XSS')</script>",
@@ -94,15 +94,37 @@ class TestXSSPrevention:
         with open(js_path, 'r') as f:
             content = f.read()
         
-        # Verify that retailer and runId are escaped with escapeForJs before use
-        assert 'const safeRetailer = escapeForJs(retailer)' in content, \
-            "Retailer should be escaped with escapeForJs"
-        assert 'const safeRunId = escapeForJs(runId)' in content, \
-            "RunId should be escaped with escapeForJs"
+        # Verify the BETTER security approach: data attributes instead of inline onclick
+        # This avoids inline JavaScript execution entirely and uses event listeners instead
         
-        # Verify they're used in onclick handlers
-        assert "onclick=\"openLogViewer('${safeRetailer}', '${safeRunId}')\"" in content, \
-            "Escaped values should be used in onclick handlers"
+        # 1. Verify that retailer and runId are escaped with escapeHtml (not escapeForJs)
+        #    because they're placed in HTML data attributes, not JS string literals
+        assert 'const safeRetailerAttr = escapeHtml(retailer)' in content, \
+            "Retailer should be escaped with escapeHtml for data attributes"
+        assert 'const safeRunIdAttr = escapeHtml(runId)' in content, \
+            "RunId should be escaped with escapeHtml for data attributes"
+        
+        # 2. Verify data attributes are used instead of onclick handlers
+        assert 'data-retailer="${safeRetailerAttr}"' in content, \
+            "Should use data-retailer attribute instead of inline onclick"
+        assert 'data-run-id="${safeRunIdAttr}"' in content, \
+            "Should use data-run-id attribute instead of inline onclick"
+        
+        # 3. Verify event listeners are bound separately (not inline)
+        assert 'bindRunHistoryLogButtons' in content, \
+            "Should use separate event listener binding instead of inline handlers"
+        assert 'button.addEventListener' in content, \
+            "Should use addEventListener for safe event binding"
+        
+        # 4. Verify NO inline onclick for user-controlled data in run items
+        #    (onclick is OK for controlled retailerId from RETAILER_CONFIG, but not for API data)
+        #    The createRunItem function should not have onclick with template literals
+        create_run_item_start = content.find('function createRunItem(')
+        create_run_item_end = content.find('\n}', create_run_item_start + 500)
+        create_run_item_body = content[create_run_item_start:create_run_item_end]
+        
+        assert 'onclick="openLogViewer' not in create_run_item_body, \
+            "createRunItem should not use inline onclick handlers for user data"
 
 
 def test_security_documentation_exists():
