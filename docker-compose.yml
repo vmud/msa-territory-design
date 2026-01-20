@@ -5,6 +5,7 @@ services:
   scraper:
     build: .
     container_name: retail-scraper
+    command: ["python", "run.py", "--all", "--resume"]
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
