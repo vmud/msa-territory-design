@@ -42,12 +42,21 @@ _proxy_clients_lock = threading.Lock()
 def setup_logging(log_file: str = "logs/scraper.log", max_bytes: int = 10*1024*1024, backup_count: int = 5) -> None:
     """Setup logging configuration with rotation (#118).
 
+    This function is idempotent - calling it multiple times will not add
+    duplicate handlers.
+
     Args:
         log_file: Path to log file
         max_bytes: Maximum file size before rotation (default: 10MB)
         backup_count: Number of backup files to keep (default: 5)
     """
     from logging.handlers import RotatingFileHandler
+
+    root_logger = logging.getLogger()
+
+    # Idempotency check: skip if handlers already configured
+    if root_logger.handlers:
+        return
 
     # Ensure log directory exists
     log_path = Path(log_file)
@@ -69,7 +78,6 @@ def setup_logging(log_file: str = "logs/scraper.log", max_bytes: int = 10*1024*1
     console_handler.setFormatter(formatter)
 
     # Configure root logger
-    root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
     root_logger.addHandler(file_handler)
     root_logger.addHandler(console_handler)
