@@ -6,6 +6,7 @@ import io
 import json
 import logging
 import os
+import secrets
 import sys
 import re
 import uuid
@@ -28,9 +29,58 @@ from src.shared.export_service import ExportService, ExportFormat
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 
-# Configure secret key for CSRF protection (use env var or generate random)
-app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', os.urandom(32).hex())
+
+def _get_secret_key() -> str:
+    """Get or generate a persistent secret key for CSRF protection (#95).
+
+    Priority:
+    1. FLASK_SECRET_KEY environment variable (recommended for production)
+    2. Persisted random secret in .flask_secret file (auto-generated)
+
+    The file-based approach ensures sessions persist across restarts
+    while using cryptographically secure random values.
+
+    Returns:
+        A 64-character hex string secret key
+    """
+    # First, check environment variable
+    env_key = os.environ.get('FLASK_SECRET_KEY')
+    if env_key:
+        return env_key
+
+    # Generate and persist a random secret to file
+    secret_file = Path(__file__).parent.parent / '.flask_secret'
+
+    if secret_file.exists():
+        try:
+            stored_secret = secret_file.read_text().strip()
+            if stored_secret and len(stored_secret) >= 32:
+                return stored_secret
+        except (IOError, OSError) as e:
+            logging.warning(f"Could not read .flask_secret file: {e}")
+
+    # Generate new random secret
+    new_secret = secrets.token_hex(32)
+    try:
+        secret_file.write_text(new_secret)
+        # Restrict file permissions (owner read/write only)
+        secret_file.chmod(0o600)
+        logging.info("Generated new secret key and saved to .flask_secret")
+    except (IOError, OSError) as e:
+        logging.warning(
+            f"Could not save secret to .flask_secret: {e}. "
+            f"Sessions will not persist across restarts."
+        )
+
+    return new_secret
+
+
+app.config['SECRET_KEY'] = _get_secret_key()
 app.config['WTF_CSRF_TIME_LIMIT'] = None  # No time limit on tokens
+
+# Check if running in development mode (whitelist approach for security #98)
+# Source files are only served when FLASK_ENV is explicitly set to 'development'
+IS_DEVELOPMENT = os.environ.get('FLASK_ENV') == 'development'
 
 # Initialize CSRF protection
 csrf = CSRFProtect(app)
@@ -108,7 +158,14 @@ def serve_src(filename):
 
     In development, Vite serves files directly. This route allows
     Flask to serve source files when running without Vite dev server.
+
+    SECURITY: This endpoint is only enabled when FLASK_ENV=development (#98)
+    Uses whitelist approach - disabled by default unless explicitly enabled.
     """
+    # Only enable in development mode (whitelist approach)
+    if not IS_DEVELOPMENT:
+        return jsonify({"error": "Not found"}), 404
+
     src_folder = Path(__file__).parent / 'src'
     return send_from_directory(str(src_folder), filename)
 
@@ -240,17 +297,92 @@ def api_retailer_status(retailer):
         return safe_error_response(e, "API request")
 
 
+# Maximum allowed limit for stores per scrape
+MAX_SCRAPER_LIMIT = 100000
+
+# Valid proxy modes
+VALID_PROXY_MODES = {'direct', 'residential', 'web_scraper_api', None}
+
+
+def _validate_scraper_options(data: dict) -> tuple:
+    """Validate scraper start options.
+
+    Returns:
+        Tuple of (is_valid, error_message_or_options)
+    """
+    retailer = data.get('retailer')
+
+    if not retailer:
+        return False, "Missing required field: retailer"
+
+    if not isinstance(retailer, str):
+        return False, "Field 'retailer' must be a string"
+
+    # Validate retailer name format (allow 'all' as special case)
+    if retailer != 'all' and not re.match(r'^[a-z][a-z0-9_]*$', retailer):
+        return False, f"Invalid retailer name format: '{retailer}'"
+
+    # Validate limit (#58)
+    limit = data.get('limit')
+    if limit is not None:
+        # Explicitly exclude booleans since bool is a subclass of int in Python
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+            return False, "Field 'limit' must be a positive integer"
+        if limit > MAX_SCRAPER_LIMIT:
+            return False, f"Field 'limit' exceeds maximum allowed value ({MAX_SCRAPER_LIMIT})"
+
+    # Validate proxy mode (#58)
+    proxy = data.get('proxy')
+    if proxy is not None and proxy not in VALID_PROXY_MODES:
+        return False, f"Invalid proxy mode '{proxy}'. Must be one of: direct, residential, web_scraper_api"
+
+    # Validate boolean fields
+    for field in ['resume', 'incremental', 'test', 'render_js', 'verbose']:
+        value = data.get(field)
+        if value is not None and not isinstance(value, bool):
+            return False, f"Field '{field}' must be a boolean"
+
+    # Validate proxy_country format
+    proxy_country = data.get('proxy_country', 'us')
+    if not isinstance(proxy_country, str) or not re.match(r'^[a-z]{2}$', proxy_country.lower()):
+        return False, "Field 'proxy_country' must be a 2-letter country code"
+
+    # Validate render_js requires web_scraper_api proxy mode (#7 review feedback)
+    render_js = data.get('render_js', False)
+    if render_js and proxy != 'web_scraper_api':
+        return False, "--render-js requires proxy mode 'web_scraper_api'"
+
+    # Validate test + limit conflict (matches CLI validation)
+    test = data.get('test', False)
+    if test and limit is not None:
+        return False, "Cannot use 'test' with 'limit' (test mode already sets limit to 10)"
+
+    # Build validated options
+    options = {
+        'resume': bool(data.get('resume', False)),
+        'incremental': bool(data.get('incremental', False)),
+        'limit': limit,
+        'test': bool(data.get('test', False)),
+        'proxy': proxy,
+        'render_js': bool(data.get('render_js', False)),
+        'proxy_country': proxy_country.lower(),
+        'verbose': bool(data.get('verbose', False))
+    }
+
+    return True, options
+
+
 @app.route('/api/scraper/start', methods=['POST'])
 @require_json
 def api_scraper_start():
     """Start scraper(s)
-    
+
     Request body:
     {
         "retailer": "verizon",  # Required: retailer name or "all"
         "resume": true,         # Optional: resume from checkpoint (default: false)
         "incremental": false,   # Optional: incremental mode (default: false)
-        "limit": null,          # Optional: limit number of stores (default: null)
+        "limit": null,          # Optional: limit number of stores (default: null, max: 100000)
         "test": false,          # Optional: test mode with 10 stores (default: false)
         "proxy": "direct",      # Optional: proxy mode (direct/residential/web_scraper_api)
         "render_js": false,     # Optional: enable JS rendering (default: false)
@@ -260,21 +392,14 @@ def api_scraper_start():
     """
     try:
         data = request.get_json() or {}
+
+        # Validate all options (#58)
+        is_valid, result = _validate_scraper_options(data)
+        if not is_valid:
+            return jsonify({"error": result}), 400
+
         retailer = data.get('retailer')
-        
-        if not retailer:
-            return jsonify({"error": "Missing required field: retailer"}), 400
-        
-        options = {
-            'resume': data.get('resume', False),
-            'incremental': data.get('incremental', False),
-            'limit': data.get('limit'),
-            'test': data.get('test', False),
-            'proxy': data.get('proxy'),
-            'render_js': data.get('render_js', False),
-            'proxy_country': data.get('proxy_country', 'us'),
-            'verbose': data.get('verbose', False)
-        }
+        options = result
         
         if retailer == 'all':
             config = status.load_retailers_config()
@@ -325,6 +450,10 @@ def api_scraper_stop():
         if not retailer:
             return jsonify({"error": "Missing required field: retailer"}), 400
         
+        # Validate timeout is a proper integer, not a boolean
+        if isinstance(timeout, bool) or not isinstance(timeout, int) or timeout < 1:
+            return jsonify({"error": "Field 'timeout' must be a positive integer"}), 400
+        
         if retailer == 'all':
             result = _scraper_manager.stop_all(timeout=timeout)
             return jsonify({
@@ -363,6 +492,10 @@ def api_scraper_restart():
         resume = data.get('resume', True)
         timeout = data.get('timeout', 30)
         
+        # Validate timeout is a proper integer, not a boolean
+        if isinstance(timeout, bool) or not isinstance(timeout, int) or timeout < 1:
+            return jsonify({"error": "Field 'timeout' must be a positive integer"}), 400
+        
         if retailer == 'all':
             config = status.load_retailers_config()
             results = []
@@ -393,21 +526,33 @@ def api_scraper_restart():
         return safe_error_response(e, "API request")
 
 
+# Maximum allowed limit for run history queries
+MAX_RUN_HISTORY_LIMIT = 100
+
+
 @app.route('/api/runs/<retailer>')
 def api_run_history(retailer):
     """Get historical runs for a retailer
-    
+
     Query params:
-        limit: Number of runs to return (default: 10)
+        limit: Number of runs to return (default: 10, max: 100)
     """
     try:
+        # Validate retailer name format
+        if not re.match(r'^[a-z][a-z0-9_]*$', retailer):
+            return jsonify({"error": "Invalid retailer name format"}), 400
+
         config = status.load_retailers_config()
         if retailer not in config:
             return jsonify({"error": f"Unknown retailer: {retailer}"}), 404
-        
+
+        # Bound the limit parameter (#99)
         limit = request.args.get('limit', 10, type=int)
+        limit = max(limit, 1)
+        limit = min(limit, MAX_RUN_HISTORY_LIMIT)
+
         runs = run_tracker.get_run_history(retailer, limit=limit)
-        
+
         return jsonify({
             "retailer": retailer,
             "runs": runs,
@@ -417,13 +562,18 @@ def api_run_history(retailer):
         return safe_error_response(e, "API request")
 
 
+# Maximum allowed values for log API parameters
+MAX_LOG_TAIL = 10000
+MAX_LOG_OFFSET = 1000000  # 1 million lines
+
+
 @app.route('/api/logs/<retailer>/<run_id>')
 def api_get_logs(retailer, run_id):
     """Get logs for a specific run
 
     Query params:
-        tail: Number of lines to return from end (default: all)
-        offset: Line number to start from for incremental fetching (default: 0)
+        tail: Number of lines to return from end (default: all, max: 10000)
+        offset: Line number to start from for incremental fetching (default: 0, max: 1000000)
 
     Response includes:
         - total_lines: Total lines in log file
@@ -462,8 +612,17 @@ def api_get_logs(retailer, run_id):
             if scraper_status and scraper_status.get('run_id') == run_id:
                 is_active = True
 
+        # Bound tail and offset parameters (#100)
         tail = request.args.get('tail', type=int)
         offset = request.args.get('offset', type=int, default=0)
+
+        # Apply bounds
+        if tail is not None:
+            tail = max(tail, 1)
+            tail = min(tail, MAX_LOG_TAIL)
+
+        offset = max(offset, 0)
+        offset = min(offset, MAX_LOG_OFFSET)
 
         with open(log_file, 'r', encoding='utf-8') as f:
             lines = f.readlines()

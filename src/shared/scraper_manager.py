@@ -50,40 +50,149 @@ class ScraperManager:
     
     def _get_log_file(self, retailer: str, run_id: str) -> str:
         """Get log file path for retailer
-        
+
         Args:
             retailer: Retailer name
             run_id: Run ID for this scraper run
-        
+
         Returns:
             Path to log file (data/{retailer}/logs/{run_id}.log)
         """
         log_dir = Path(f"data/{retailer}/logs")
         log_dir.mkdir(parents=True, exist_ok=True)
         return str(log_dir / f"{run_id}.log")
-    
+
+    def _verify_process_is_scraper(self, pid: int, retailer: str) -> bool:
+        """Verify that a PID belongs to our scraper process (#56).
+
+        PID recycling can cause os.kill(pid, 0) to succeed for a different
+        process that has reused the PID. This method verifies the process
+        command line contains expected scraper identifiers.
+
+        Safety: When verification tools fail or are unavailable, we fall back
+        to trusting the PID check (return True) rather than incorrectly marking
+        valid processes as failed.
+
+        Args:
+            pid: Process ID to verify
+            retailer: Expected retailer name in command line
+
+        Returns:
+            True if the process appears to be our scraper or if verification fails,
+            False only if we can confirm it's NOT our scraper
+        """
+        try:
+            if platform.system() == 'Darwin' or platform.system() == 'Linux':
+                # Use ps to get command line on Unix-like systems
+                result = subprocess.run(
+                    ['ps', '-p', str(pid), '-o', 'command='],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False
+                )
+                if result.returncode != 0:
+                    # ps failed - could be PID doesn't exist OR tool error
+                    # Check if output suggests "no such process" vs other errors
+                    stderr_output = result.stderr if hasattr(result, 'stderr') else ""
+                    if not result.stdout.strip() and not stderr_output:
+                        # No output typically means PID doesn't exist
+                        return False
+                    # Other error - fall back to trusting PID check
+                    logger.debug(
+                        f"ps returned non-zero for PID {pid} but unclear if process "
+                        f"missing or tool error - falling back to PID check"
+                    )
+                    return True
+
+                cmdline = result.stdout.strip()
+                if not cmdline:
+                    # Empty output means process doesn't exist
+                    return False
+                    
+                # Verify it looks like our scraper command
+                if 'run.py' in cmdline and retailer in cmdline:
+                    return True
+                # Also check for python process with our module
+                if 'python' in cmdline.lower() and retailer in cmdline:
+                    return True
+                # Process exists but isn't our scraper
+                return False
+
+            elif platform.system() == 'Windows':
+                # Use wmic on Windows
+                result = subprocess.run(
+                    ['wmic', 'process', 'where', f'ProcessId={pid}', 'get', 'CommandLine'],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False
+                )
+                if result.returncode != 0:
+                    # wmic failed - fall back to trusting PID check to be safe
+                    logger.debug(
+                        f"wmic returned non-zero for PID {pid} - unclear if process "
+                        f"missing or tool error - falling back to PID check"
+                    )
+                    return True
+
+                cmdline = result.stdout.strip()
+                # WMIC returns headers even for non-existent PIDs, check for data
+                lines = [line.strip() for line in cmdline.split('\n') if line.strip()]
+                if len(lines) <= 1:  # Only header, no data
+                    return False
+                    
+                if 'run.py' in cmdline and retailer in cmdline:
+                    return True
+                # Process exists but isn't our scraper
+                return False
+
+            else:
+                # Unknown platform - fall back to PID-only check
+                logger.debug(f"Unknown platform {platform.system()} - falling back to PID-only check")
+                return True
+
+        except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
+            logger.debug(f"Could not verify process {pid}: {e} - falling back to PID-only check")
+            # Fall back to PID-only check - assume process is valid if PID exists
+            # We can't determine either way, so trust the existing PID check
+            return True
+
     def _recover_running_processes(self) -> None:
         """Recover running processes from RunTracker metadata on startup
-        
+
         This allows the manager to track scrapers that were started before
         a restart/crash of the dashboard application.
+
+        Uses process verification (#56) to avoid misidentifying recycled PIDs.
         """
         config = load_retailers_config()
-        
+
         for retailer in config.keys():
             active_run = get_active_run(retailer)
             if not active_run:
                 continue
-            
+
             pid = active_run.get('config', {}).get('pid')
             if not pid:
                 continue
-            
+
             try:
+                # First check if PID exists
                 os.kill(pid, 0)
-                
+
+                # Then verify it's actually our scraper process (#56)
+                if not self._verify_process_is_scraper(pid, retailer):
+                    logger.info(
+                        f"PID {pid} exists but is not our scraper for {retailer} "
+                        f"(likely PID recycling)"
+                    )
+                    tracker = RunTracker(retailer, run_id=active_run['run_id'])
+                    tracker.fail("Process not found on recovery (PID recycled)")
+                    continue
+
                 logger.info(f"Recovered running scraper for {retailer} (PID: {pid})")
-                
+
                 self._processes[retailer] = {
                     "pid": pid,
                     "process": None,
@@ -95,7 +204,7 @@ class ScraperManager:
                 }
             except (OSError, ProcessLookupError):
                 logger.info(f"Stale run metadata for {retailer} (PID {pid} not running)")
-                
+
                 tracker = RunTracker(retailer, run_id=active_run['run_id'])
                 tracker.fail("Process not found on recovery (likely crashed)")
     
