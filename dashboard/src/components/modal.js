@@ -17,7 +17,11 @@ let parsedLogLines = [];
 let lastLineCount = 0;
 let userHasScrolled = false;
 let isPolling = false; // Prevent overlapping requests
-const LIVE_POLL_INTERVAL = 2000; // 2 seconds
+let pollErrors = 0; // Track consecutive errors for backoff
+let currentPollInterval = 2000; // Dynamic polling interval
+const LIVE_POLL_INTERVAL = 2000; // Base: 2 seconds
+const MAX_POLL_INTERVAL = 10000; // Max: 10 seconds on errors
+const BACKOFF_MULTIPLIER = 1.5; // Increase interval by 1.5x on each error
 
 /**
  * Open the config modal
@@ -219,8 +223,13 @@ async function openLogModal(retailer, runId) {
 function startLivePolling(retailer, runId) {
   // Clear any existing interval
   stopLivePolling();
+  
+  // Reset polling state for fresh start
+  pollErrors = 0;
+  currentPollInterval = LIVE_POLL_INTERVAL;
 
-  liveLogInterval = setInterval(async () => {
+  // Define the polling function so it can be referenced by name (not arguments.callee)
+  const pollFunction = async () => {
     // Skip if previous request is still in-flight
     if (isPolling) {
       return;
@@ -284,12 +293,71 @@ function startLivePolling(retailer, runId) {
           scrollToBottom();
         }
       }
+      
+      // Reset error count on successful fetch
+      pollErrors = 0;
+      currentPollInterval = LIVE_POLL_INTERVAL;
+      
     } catch (error) {
       console.error('Error fetching live logs:', error);
+
+      // Re-check state after async request completes
+      const currentState = store.getState();
+      if (!currentState.ui.logModalOpen ||
+          currentState.ui.currentLogRetailer !== retailer ||
+          currentState.ui.currentLogRunId !== runId) {
+        // Stale request - modal closed or different log now displayed
+        stopLivePolling();
+        return;
+      }
+      
+      // Handle rate limiting (429) - stop polling temporarily
+      if (error.status === 429) {
+        pollErrors++;
+        const backoffInterval = Math.min(
+          LIVE_POLL_INTERVAL * Math.pow(BACKOFF_MULTIPLIER, pollErrors),
+          MAX_POLL_INTERVAL
+        );
+        
+        console.warn(`Rate limited (429). Slowing polling to ${(backoffInterval/1000).toFixed(1)}s`);
+        showToast(`Log polling rate limited. Slowing down to ${(backoffInterval/1000).toFixed(1)}s intervals`, 'warning');
+        
+        // If repeatedly rate limited, stop polling
+        if (pollErrors >= 3) {
+          console.error('Repeated rate limiting - stopping live log polling');
+          stopLivePolling();
+          actions.setLiveLogEnabled(false);
+          updateLiveIndicator(false);
+          showToast('Live log polling stopped due to repeated rate limiting. Refresh to try again.', 'error');
+          return;
+        }
+        
+        // Restart interval with new backoff delay using the named function reference
+        // IMPORTANT: Don't call stopLivePolling() here as it would reset pollErrors counter
+        // Just clear the interval and restart with backoff - preserve error tracking
+        if (liveLogInterval) {
+          clearInterval(liveLogInterval);
+        }
+        currentPollInterval = backoffInterval;
+        liveLogInterval = setInterval(pollFunction, backoffInterval);
+      }
+      // Handle other errors (network, server errors)
+      else if (error.status >= 500 || error.isNetworkError) {
+        pollErrors++;
+        if (pollErrors >= 5) {
+          console.error('Too many polling errors - stopping');
+          stopLivePolling();
+          actions.setLiveLogEnabled(false);
+          updateLiveIndicator(false);
+          showToast('Live log polling stopped due to server errors', 'error');
+        }
+      }
     } finally {
       isPolling = false;
     }
-  }, LIVE_POLL_INTERVAL);
+  };
+
+  liveLogInterval = setInterval(pollFunction, currentPollInterval);
 }
 
 /**
@@ -301,6 +369,8 @@ function stopLivePolling() {
     liveLogInterval = null;
   }
   isPolling = false; // Reset polling flag
+  pollErrors = 0; // Reset error counter
+  currentPollInterval = LIVE_POLL_INTERVAL; // Reset to base interval
 }
 
 /**

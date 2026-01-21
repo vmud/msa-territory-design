@@ -66,26 +66,33 @@ class TargetStore:
         return result
 
 
-def _check_pause_logic() -> None:
+def _check_pause_logic(retailer: str = 'target') -> None:
     """Check if we need to pause based on request count (#71).
 
     Uses standardized random delay ranges for consistency with other scrapers.
     """
+    # Skip modulo operations if pauses are effectively disabled (>= 999999)
+    try:
+        if target_config.PAUSE_50_REQUESTS >= 999999 and target_config.PAUSE_200_REQUESTS >= 999999:
+            return
+    except (TypeError, AttributeError):
+        pass  # Config mocked in tests, continue with normal pause logic
+    
     count = _request_counter.count
 
     if count % target_config.PAUSE_200_REQUESTS == 0 and count > 0:
         # Use random delay range for 200-request pause (#71)
         pause_time = random.uniform(target_config.PAUSE_200_MIN, target_config.PAUSE_200_MAX)
-        logging.info(f"Long pause after {count} requests: {pause_time:.0f} seconds")
+        logging.info(f"[{retailer}] Long pause after {count} requests: {pause_time:.0f} seconds")
         time.sleep(pause_time)
     elif count % target_config.PAUSE_50_REQUESTS == 0 and count > 0:
         # Use random delay range for 50-request pause (#71)
         pause_time = random.uniform(target_config.PAUSE_50_MIN, target_config.PAUSE_50_MAX)
-        logging.info(f"Pause after {count} requests: {pause_time:.1f} seconds")
+        logging.info(f"[{retailer}] Pause after {count} requests: {pause_time:.1f} seconds")
         time.sleep(pause_time)
 
 
-def get_all_store_ids(session: requests.Session) -> List[Dict[str, Any]]:
+def get_all_store_ids(session: requests.Session, retailer: str = 'target') -> List[Dict[str, Any]]:
     """Extract all store IDs from Target's sitemap.
 
     Args:
@@ -94,15 +101,15 @@ def get_all_store_ids(session: requests.Session) -> List[Dict[str, Any]]:
     Returns:
         List of store dictionaries with store_id, slug, and url
     """
-    logging.info(f"Fetching sitemap: {target_config.SITEMAP_URL}")
+    logging.info(f"[{retailer}] Fetching sitemap: {target_config.SITEMAP_URL}")
 
     response = utils.get_with_retry(session, target_config.SITEMAP_URL)
     if not response:
-        logging.error(f"Failed to fetch sitemap: {target_config.SITEMAP_URL}")
+        logging.error(f"[{retailer}] Failed to fetch sitemap: {target_config.SITEMAP_URL}")
         return []
 
     _request_counter.increment()
-    _check_pause_logic()
+    _check_pause_logic(retailer)
 
     try:
         # Check if content is already decompressed (starts with XML) or gzipped
@@ -135,18 +142,18 @@ def get_all_store_ids(session: requests.Session) -> List[Dict[str, Any]]:
                     "url": f"https://www.target.com/sl/{slug}/{store_id}"
                 })
 
-        logging.info(f"Found {len(stores)} stores in sitemap")
+        logging.info(f"[{retailer}] Found {len(stores)} stores in sitemap")
         return stores
 
     except gzip.BadGzipFile as e:
-        logging.error(f"Failed to decompress gzip sitemap: {e}")
+        logging.error(f"[{retailer}] Failed to decompress gzip sitemap: {e}")
         return []
     except Exception as e:
-        logging.error(f"Unexpected error processing sitemap: {e}")
+        logging.error(f"[{retailer}] Unexpected error processing sitemap: {e}")
         return []
 
 
-def get_store_details(session: requests.Session, store_id: int) -> Optional[TargetStore]:
+def get_store_details(session: requests.Session, store_id: int, retailer: str = 'target') -> Optional[TargetStore]:
     """Fetch detailed store info from Redsky API.
 
     Args:
@@ -166,11 +173,11 @@ def get_store_details(session: requests.Session, store_id: int) -> Optional[Targ
     url_with_params = f"{target_config.REDSKY_API_URL}?{urllib.parse.urlencode(params)}"
     response = utils.get_with_retry(session, url_with_params, max_retries=target_config.MAX_RETRIES)
     if not response:
-        logging.warning(f"Failed to fetch store details for store_id={store_id}")
+        logging.warning(f"[{retailer}] Failed to fetch store details for store_id={store_id}")
         return None
 
     _request_counter.increment()
-    _check_pause_logic()
+    _check_pause_logic(retailer)
 
     try:
         if response.status_code == 200:
@@ -178,7 +185,7 @@ def get_store_details(session: requests.Session, store_id: int) -> Optional[Targ
             store = data.get("data", {}).get("store", {})
 
             if not store:
-                logging.warning(f"No store data found for store_id={store_id}")
+                logging.warning(f"[{retailer}] No store data found for store_id={store_id}")
                 return None
 
             # Extract address
@@ -220,14 +227,14 @@ def get_store_details(session: requests.Session, store_id: int) -> Optional[Targ
 
             return target_store
         else:
-            logging.warning(f"API returned status {response.status_code} for store_id={store_id}")
+            logging.warning(f"[{retailer}] API returned status {response.status_code} for store_id={store_id}")
             return None
 
     except json.JSONDecodeError as e:
-        logging.warning(f"Failed to parse JSON response for store_id={store_id}: {e}")
+        logging.warning(f"[{retailer}] Failed to parse JSON response for store_id={store_id}: {e}")
         return None
     except Exception as e:
-        logging.warning(f"Unexpected error processing store_id={store_id}: {e}")
+        logging.warning(f"[{retailer}] Unexpected error processing store_id={store_id}: {e}")
         return None
 
 
@@ -267,6 +274,11 @@ def run(session, config: dict, **kwargs) -> dict:
         
         reset_request_counter()
         
+        # Auto-select delays based on proxy mode for optimal performance
+        proxy_mode = config.get('proxy', {}).get('mode', 'direct')
+        min_delay, max_delay = utils.select_delays(config, proxy_mode)
+        logging.info(f"[{retailer_name}] Using delays: {min_delay:.1f}-{max_delay:.1f}s (mode: {proxy_mode})")
+        
         checkpoint_path = f"data/{retailer_name}/checkpoints/scrape_progress.json"
         checkpoint_interval = config.get('checkpoint_interval', 100)
         
@@ -282,7 +294,7 @@ def run(session, config: dict, **kwargs) -> dict:
                 logging.info(f"[{retailer_name}] Resuming from checkpoint: {len(stores)} stores already collected")
                 checkpoints_used = True
         
-        store_list = get_all_store_ids(session)
+        store_list = get_all_store_ids(session, retailer_name)
         logging.info(f"[{retailer_name}] Found {len(store_list)} store IDs")
         
         if not store_list:
@@ -290,6 +302,9 @@ def run(session, config: dict, **kwargs) -> dict:
             return {'stores': [], 'count': 0, 'checkpoints_used': False}
         
         remaining_stores = [s for s in store_list if s.get('store_id') not in completed_ids]
+        
+        if resume and completed_ids:
+            logging.info(f"[{retailer_name}] Skipping {len(store_list) - len(remaining_stores)} already-processed stores from checkpoint")
         
         if limit:
             logging.info(f"[{retailer_name}] Limited to {limit} stores")
@@ -300,12 +315,21 @@ def run(session, config: dict, **kwargs) -> dict:
                 remaining_stores = []
         
         total_to_process = len(remaining_stores)
+        if total_to_process > 0:
+            logging.info(f"[{retailer_name}] Extracting details for {total_to_process} stores")
+        else:
+            logging.info(f"[{retailer_name}] No new stores to process")
+        
         for i, store_info in enumerate(remaining_stores, 1):
             store_id = store_info.get('store_id')
-            store_obj = get_store_details(session, store_id)
+            store_obj = get_store_details(session, store_id, retailer_name)
             if store_obj:
                 stores.append(store_obj.to_dict())
                 completed_ids.add(store_id)
+                
+                # Log successful extraction every 10 stores for more frequent updates
+                if i % 10 == 0:
+                    logging.info(f"[{retailer_name}] Extracted {len(stores)} stores so far ({i}/{total_to_process})")
             
             # Progress logging every 100 stores
             if i % 100 == 0:
