@@ -30,7 +30,6 @@ class TMobileStore:
     store_id: str
     branch_code: str
     name: str
-    store_type: Optional[str]
     phone: str
     street_address: str
     city: str
@@ -39,9 +38,11 @@ class TMobileStore:
     country: str
     latitude: str
     longitude: str
-    opening_hours: Optional[List[str]]
     url: str
     scraped_at: str
+    # Optional fields with defaults (must come after required fields)
+    store_type: Optional[str] = None
+    opening_hours: Optional[List[str]] = None
 
     def to_dict(self) -> dict:
         """Convert to dictionary for export"""
