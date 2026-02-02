@@ -25,7 +25,6 @@ from bs4 import BeautifulSoup
 from config import costco_config as config
 from src.shared import utils
 from src.shared.proxy_client import ProxyClient, ProxyConfig, ProxyMode
-from src.shared.session_factory import create_session_factory
 
 
 logger = logging.getLogger(__name__)
