@@ -441,13 +441,29 @@ def run(session, retailer_config: Dict[str, Any], retailer: str, **kwargs) -> di
     """
     stores = []
     checkpoints_used = False
+    completed_store_ids = set()
 
     limit = kwargs.get('limit')
     test_mode = kwargs.get('test_mode', False)
     proxy_mode = kwargs.get('proxy_mode', 'web_scraper_api')  # Default to web_scraper_api for Costco
+    resume = kwargs.get('resume', False)
 
     if test_mode:
         limit = 10
+
+    # Checkpoint setup
+    retailer_name = retailer.lower()
+    checkpoint_path = f"data/{retailer_name}/checkpoints/scrape_progress.json"
+    checkpoint_interval = retailer_config.get('checkpoint_interval', config.CHECKPOINT_INTERVAL)
+
+    # Load checkpoint if resuming
+    if resume:
+        checkpoint = utils.load_checkpoint(checkpoint_path)
+        if checkpoint:
+            stores = checkpoint.get('stores', [])
+            completed_store_ids = set(checkpoint.get('completed_store_ids', []))
+            logger.info(f"[{retailer_name}] Resuming from checkpoint: {len(stores)} warehouses already collected")
+            checkpoints_used = True
 
     logger.info(f"Starting Costco scraper (limit={limit}, proxy_mode={proxy_mode})")
 
@@ -499,7 +515,14 @@ def run(session, retailer_config: Dict[str, Any], retailer: str, **kwargs) -> di
     # For now, use the data we have from the list page
     scraped_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
-    for store_id, data in unique_warehouses.items():
+    # Filter out already completed store IDs (for resume support)
+    pending_warehouses = {
+        sid: data for sid, data in unique_warehouses.items()
+        if sid not in completed_store_ids
+    }
+    logger.info(f"Processing {len(pending_warehouses)} pending warehouses (skipping {len(completed_store_ids)} already completed)")
+
+    for i, (store_id, data) in enumerate(pending_warehouses.items(), 1):
         # Create CostcoWarehouse object
         try:
             # Parse address if we only have address_text
@@ -532,13 +555,34 @@ def run(session, retailer_config: Dict[str, Any], retailer: str, **kwargs) -> di
             validation = utils.validate_store_data(store_dict)
             if validation.is_valid:
                 stores.append(store_dict)
+                completed_store_ids.add(store_id)
             else:
                 logger.debug(f"Invalid warehouse {store_id}: {validation.errors}")
+
+            # Checkpoint at intervals
+            if i % checkpoint_interval == 0:
+                utils.save_checkpoint({
+                    'completed_count': len(stores),
+                    'completed_store_ids': list(completed_store_ids),
+                    'stores': stores,
+                    'last_updated': datetime.now(timezone.utc).isoformat()
+                }, checkpoint_path)
+                logger.debug(f"Checkpoint saved: {len(stores)} warehouses")
 
         except Exception as e:
             logger.warning(f"Error creating warehouse object for {store_id}: {e}")
 
     logger.info(f"Costco scraper complete: {len(stores)} valid warehouses")
+
+    # Save final checkpoint
+    if stores:
+        utils.save_checkpoint({
+            'completed_count': len(stores),
+            'completed_store_ids': list(completed_store_ids),
+            'stores': stores,
+            'last_updated': datetime.now(timezone.utc).isoformat()
+        }, checkpoint_path)
+        logger.debug(f"Final checkpoint saved: {len(stores)} warehouses")
 
     return {
         'stores': stores,
