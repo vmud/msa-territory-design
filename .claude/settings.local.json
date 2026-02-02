@@ -89,7 +89,55 @@
       "Bash(git branch:*)",
       "Bash(gh pr checks:*)",
       "Bash(head:*)",
-      "Bash(python -m py_compile:*)"
+      "Bash(python -m py_compile:*)",
+      "Bash(git -C /Users/vmud/Documents/dev/projects/retail-store-scraper log --oneline -20)",
+      "Bash(git -C /Users/vmud/Documents/dev/projects/retail-store-scraper remote -v)",
+      "Bash(chmod:*)",
+      "Bash(bash:*)",
+      "Bash(claude mcp:*)",
+      "WebSearch",
+      "Bash(aichat search:*)",
+      "Bash(git -C /Users/vmud/Documents/dev/projects/retail-store-scraper show feat/costco-scraper:src/scrapers/costco.py)",
+      "Bash(git -C /Users/vmud/Documents/dev/projects/retail-store-scraper log feat/costco-scraper -10 --oneline --all)",
+      "Bash(/Users/vmud/Documents/dev/projects/retail-store-scraper/.claude/hooks/validate-yaml.sh:*)",
+      "Bash(git -C /Users/vmud/Documents/dev/projects/retail-store-scraper status)",
+      "Bash(git -C /Users/vmud/Documents/dev/projects/retail-store-scraper diff --staged)",
+      "Bash(git -C /Users/vmud/Documents/dev/projects/retail-store-scraper log --oneline -5)",
+      "Bash(git -C /Users/vmud/Documents/dev/projects/retail-store-scraper diff .claude/settings.local.json)",
+      "Bash(git -C /Users/vmud/Documents/dev/projects/retail-store-scraper add .claude/settings.local.json .claude/hooks/validate-yaml.sh .claude/skills/validate-output/SKILL.md .claude/skills/compare-runs/SKILL.md)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-sensitive-files.sh",
+            "statusMessage": "Checking file permissions..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/lint-on-edit.sh",
+            "statusMessage": "Running lint check...",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/validate-yaml.sh",
+            "statusMessage": "Validating YAML syntax...",
+            "async": true
+          }
+        ]
+      }
     ]
   }
 }
