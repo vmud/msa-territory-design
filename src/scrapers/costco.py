@@ -393,11 +393,17 @@ def run(session, retailer_config: Dict[str, Any], retailer: str, **kwargs) -> di
                 # Fall back to zip code search
                 warehouses = _fetch_by_zip_codes(proxy_client, retailer_config, limit, **kwargs)
             else:
-                warehouses = _extract_warehouses_from_page(response.text)
+                try:
+                    warehouses = _extract_warehouses_from_page(response.text)
+                except Exception as e:
+                    logger.error(f"Error extracting warehouses from locations page: {e}")
+                    logger.info("Falling back to zip code search after extraction error")
+                    warehouses = _fetch_by_zip_codes(proxy_client, retailer_config, limit, **kwargs)
 
         except Exception as e:
             logger.error(f"Error fetching locations page: {e}")
-            warehouses = []
+            logger.info("Falling back to zip code search after fetch error")
+            warehouses = _fetch_by_zip_codes(proxy_client, retailer_config, limit, **kwargs)
 
         # Step 2: Deduplicate and limit
         unique_warehouses = {}
