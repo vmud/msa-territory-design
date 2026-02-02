@@ -1,13 +1,20 @@
-"""Configuration constants for Bell Store Scraper"""
+"""Configuration constants for Bell Store Scraper
+
+Bell uses storelocator.bell.ca with:
+- Sitemap at /sitemap.xml (~251 store URLs)
+- LocalBusiness JSON-LD schema on each store page
+- Store IDs in format BE### (e.g., BE516)
+"""
 
 import random
 
-# Sitemap configuration
-SITEMAP_URL = "https://storelocator.bell.ca/sitemap.xml"
-
 # Base URLs
 BASE_URL = "https://storelocator.bell.ca"
-STORE_PAGE_BASE = "https://storelocator.bell.ca/bellca/en"
+SITEMAP_URL = f"{BASE_URL}/sitemap.xml"
+
+# Store page URL pattern
+# Example: https://storelocator.bell.ca/en/on/toronto/316-queen-st-w
+STORE_URL_PATTERN = r'/en/[a-z]{2}/[^/]+/[^/]+'
 
 # User agents for rotation
 USER_AGENTS = [
@@ -19,13 +26,13 @@ USER_AGENTS = [
 
 
 def get_headers(user_agent=None):
-    """Get headers dict with optional user agent rotation"""
+    """Get headers dict with optional user agent rotation."""
     if user_agent is None:
         user_agent = random.choice(USER_AGENTS)
 
     return {
         "User-Agent": user_agent,
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
         "Accept-Language": "en-CA,en-US;q=0.9,en;q=0.8",
         "Accept-Encoding": "gzip, deflate, br",
         "Connection": "keep-alive",
@@ -33,32 +40,9 @@ def get_headers(user_agent=None):
     }
 
 
-# Canadian province name to abbreviation mapping (reused from telus)
-PROVINCE_ABBREVIATIONS = {
-    'Alberta': 'AB',
-    'British Columbia': 'BC',
-    'Manitoba': 'MB',
-    'New Brunswick': 'NB',
-    'Newfoundland and Labrador': 'NL',
-    'Northwest Territories': 'NT',
-    'Nova Scotia': 'NS',
-    'Nunavut': 'NU',
-    'Ontario': 'ON',
-    'Prince Edward Island': 'PE',
-    'Quebec': 'QC',
-    'Québec': 'QC',
-    'Saskatchewan': 'SK',
-    'Yukon': 'YT',
-}
-
-# Store URL pattern regex for filtering sitemap
-# Matches: /bellca/en/{Province}/{City}/{StoreName}/{StoreID}
-# where StoreID is BE followed by digits
-STORE_URL_PATTERN = r'/bellca/en/[^/]+/[^/]+/[^/]+/BE\d+'
-
-# Rate limiting (robots.txt specifies Crawl-delay: 10)
-MIN_DELAY = 10.0
-MAX_DELAY = 12.0
+# Rate limiting (conservative for HTML scraping)
+MIN_DELAY = 1.0
+MAX_DELAY = 2.0
 
 # Retry settings
 MAX_RETRIES = 3
