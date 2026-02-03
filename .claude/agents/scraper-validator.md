@@ -1,3 +1,8 @@
+---
+name: scraper-validator
+description: Validates scraper implementations for consistency and adherence to project patterns
+---
+
 # Scraper Validator Agent
 
 Validates scraper implementations for consistency, correctness, and adherence to project patterns.

@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/anthropics/claude-code/main/schemas/mcp.schema.json",
-  "servers": {
+  "mcpServers": {
     "context7": {
       "command": "npx",
       "args": ["-y", "@context7/mcp"],

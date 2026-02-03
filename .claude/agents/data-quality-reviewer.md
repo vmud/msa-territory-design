@@ -1,3 +1,8 @@
+---
+name: data-quality-reviewer
+description: Reviews scraped store data for quality, completeness, and consistency
+---
+
 # Data Quality Reviewer Agent
 
 Reviews scraped store data for quality, completeness, and consistency before GCS sync or production use.

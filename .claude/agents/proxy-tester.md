@@ -1,3 +1,8 @@
+---
+name: proxy-tester
+description: Tests Oxylabs proxy configuration and diagnoses connectivity issues
+---
+
 # Proxy Tester Agent
 
 Tests Oxylabs proxy configuration and diagnoses connectivity issues.
