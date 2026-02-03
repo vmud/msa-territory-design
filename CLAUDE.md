@@ -325,3 +325,15 @@ Deployment tools in `deploy/`:
 - `rsync-deploy.sh` - production deployment via rsync
 - `validate.sh` - deployment validation checks
 - `diagnose-network.sh` - network troubleshooting utilities
+
+## Implementation Standards
+
+When implementing features from design plans, create all modules with corresponding test files and ensure CLI is functional before marking complete.
+
+## Setup & Configuration
+
+For configuration/setup tasks (MCP, credentials, integrations), always verify the setup works with a simple test command before considering the task complete.
+
+## Code Review
+
+When doing code reviews, create a structured review checklist and document findings in a markdown file before discussing with user.
