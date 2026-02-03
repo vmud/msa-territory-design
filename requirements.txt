@@ -22,10 +22,10 @@ pyyaml==6.0.1
 python-dotenv==1.0.0  # Load .env file for environment variables
 
 # Testing
-pytest==7.4.3
-pytest-mock==3.12.0
-pytest-asyncio==0.23.2
-pytest-cov==4.1.0
+pytest==8.3.5
+pytest-mock==3.15.1
+pytest-asyncio==0.25.3
+pytest-cov==6.1.1
 
 # Code quality & formatting
 black==24.1.1      # Code formatter
