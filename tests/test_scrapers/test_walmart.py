@@ -743,7 +743,7 @@ class TestWalmartProxyOverride:
     @patch('src.scrapers.walmart.ProxyClient')
     @patch('src.scrapers.walmart.ProxyConfig')
     def test_run_respects_cli_proxy_override(
-        self, mock_proxy_config_class, mock_proxy_client, mock_get_urls, mock_cache_class
+        self, mock_proxy_config_class, _mock_proxy_client, mock_get_urls, mock_cache_class
     ):
         """run() should use proxy config from passed config dict, not hardcoded."""
         from src.shared.proxy_client import ProxyMode
@@ -781,7 +781,7 @@ class TestWalmartProxyOverride:
     @patch('src.scrapers.walmart.ProxyClient')
     @patch('src.scrapers.walmart.ProxyConfig')
     def test_direct_mode_upgrades_to_web_scraper_api(
-        self, mock_proxy_config_class, mock_proxy_client, mock_get_urls, mock_cache_class
+        self, mock_proxy_config_class, _mock_proxy_client, mock_get_urls, mock_cache_class
     ):
         """Direct mode should be upgraded to web_scraper_api for Walmart (requires JS)."""
         mock_cache = Mock()

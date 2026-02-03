@@ -939,7 +939,7 @@ class TestMultiTenantLocations:
             },
         ]
 
-        stores_by_key, fingerprints, collision_count = detector._build_store_index(stores)
+        stores_by_key, _fingerprints, _collision_count = detector._build_store_index(stores)
 
         # Both stores should be preserved
         assert len(stores_by_key) == 2, f"Expected 2 stores, got {len(stores_by_key)}"
@@ -973,7 +973,7 @@ class TestMultiTenantLocations:
             },
         ]
 
-        stores_by_key, fingerprints, collision_count = detector._build_store_index(stores)
+        stores_by_key, _fingerprints, collision_count = detector._build_store_index(stores)
 
         # Should report 1 collision (true duplicate) but still preserve both
         assert collision_count == 1

@@ -17,8 +17,10 @@ jobs:
     steps:
       - name: Detect agent from branch name
         id: detect
+        env:
+          HEAD_REF: ${{ github.head_ref }}
         run: |
-          BRANCH="${{ github.head_ref }}"
+          BRANCH="$HEAD_REF"
           AGENT="unknown"
 
           if [[ "$BRANCH" =~ /cc[0-9]- ]]; then
@@ -85,6 +87,8 @@ jobs:
           fetch-depth: 0
 
       - name: Fetch all open PR branches
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
           # Get list of open PRs (excluding current)
           PR_NUMBER="${{ github.event.pull_request.number }}"
@@ -93,16 +97,19 @@ jobs:
           echo "Checking for conflicts with other open PRs..."
 
           # Fetch the base branch
-          git fetch origin ${{ github.base_ref }}
+          git fetch origin -- "$BASE_REF"
 
       - name: Check merge conflicts with base
         id: base-conflict
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          git fetch origin ${{ github.head_ref }}
+          git fetch origin -- "$HEAD_REF"
           git checkout FETCH_HEAD
 
           # Try to merge base branch
-          if git merge --no-commit --no-ff origin/${{ github.base_ref }} 2>/dev/null; then
+          if git merge --no-commit --no-ff "origin/$BASE_REF" 2>/dev/null; then
             echo "conflict=false" >> $GITHUB_OUTPUT
             echo "No conflicts with base branch"
             git merge --abort 2>/dev/null || true
@@ -128,22 +135,31 @@ jobs:
             const otherPRs = prs.filter(pr => pr.number !== currentPR);
             console.log(`Found ${otherPRs.length} other open PRs targeting ${context.payload.pull_request.base.ref}`);
 
+            // Fetch current PR files once (with pagination for >30 files)
+            const currentFiles = await github.paginate(
+              github.rest.pulls.listFiles,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: currentPR,
+                per_page: 100
+              }
+            );
+            const currentFilenames = new Set(currentFiles.map(f => f.filename));
+
             const conflictPRs = [];
             for (const pr of otherPRs) {
-              // Get the files changed in each PR
-              const { data: currentFiles } = await github.rest.pulls.listFiles({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: currentPR
-              });
+              // Get the files changed in the other PR (with pagination)
+              const otherFiles = await github.paginate(
+                github.rest.pulls.listFiles,
+                {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pr.number,
+                  per_page: 100
+                }
+              );
 
-              const { data: otherFiles } = await github.rest.pulls.listFiles({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: pr.number
-              });
-
-              const currentFilenames = new Set(currentFiles.map(f => f.filename));
               const overlapping = otherFiles.filter(f => currentFilenames.has(f.filename));
 
               if (overlapping.length > 0) {

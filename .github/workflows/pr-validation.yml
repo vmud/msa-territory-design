@@ -125,6 +125,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Fetch base branch
+        run: git fetch --no-tags --depth=1 origin ${{ github.base_ref }}
+
       - name: Check PR size
         run: |
           ADDITIONS=$(git diff --numstat origin/${{ github.base_ref }}...HEAD | awk '{sum+=$1} END {print sum}')

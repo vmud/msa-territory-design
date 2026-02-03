@@ -27,6 +27,10 @@ class TestGetWithRetry403Handling:
              patch('src.shared.utils.random.uniform', return_value=0.1):  # Minimize random delay
             result = get_with_retry(session, "http://example.com", max_retries=3, min_delay=0.1, max_delay=0.1)
 
+        # Verify result is returned (200 after retries)
+        assert result is not None
+        assert result.status_code == 200
+
         # Should have called sleep for 403 backoff
         sleep_calls = [call[0][0] for call in mock_sleep.call_args_list]
 

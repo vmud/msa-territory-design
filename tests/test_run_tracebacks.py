@@ -15,7 +15,7 @@ class TestRunAllRetailersTracebacks:
         """When a retailer raises an exception, the full traceback should be logged."""
 
         # Create a mock that raises an exception with a traceback
-        async def failing_retailer(*args, **kwargs):
+        async def failing_retailer(*_args, **_kwargs):
             def inner_function():
                 raise ValueError("Test error from inner function")
             inner_function()
@@ -39,12 +39,12 @@ class TestRunAllRetailersTracebacks:
     async def test_retailer_name_included_in_error_log(self, caplog):
         """Retailer name should be included in error context."""
 
-        async def failing_retailer(*args, **kwargs):
+        async def failing_retailer(*_args, **_kwargs):
             raise RuntimeError("Connection failed")
 
         with patch('run.run_retailer_async', side_effect=failing_retailer), \
              caplog.at_level(logging.ERROR):
-            results = await run_all_retailers(['verizon'])
+            await run_all_retailers(['verizon'])
 
         # Should include retailer name in error logging
         log_text = '\n'.join(record.message for record in caplog.records)
