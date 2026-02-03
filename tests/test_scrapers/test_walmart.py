@@ -715,3 +715,79 @@ class TestWalmartFailedUrlTracking:
 
         assert result['count'] == 0  # No stores extracted
         # Failed URLs should have been logged
+
+
+class TestWalmartProxyOverride:
+    """Tests for proxy override handling (#149)."""
+
+    @patch('src.scrapers.walmart.URLCache')
+    @patch('src.scrapers.walmart.get_store_urls_from_sitemap')
+    @patch('src.scrapers.walmart.ProxyClient')
+    @patch('src.scrapers.walmart.ProxyConfig')
+    def test_run_respects_cli_proxy_override(
+        self, mock_proxy_config_class, mock_proxy_client, mock_get_urls, mock_cache_class
+    ):
+        """run() should use proxy config from passed config dict, not hardcoded."""
+        from src.shared.proxy_client import ProxyMode
+
+        # Set up mocks
+        mock_cache = Mock()
+        mock_cache.get.return_value = []  # No cached URLs
+        mock_cache_class.return_value = mock_cache
+        mock_get_urls.return_value = []  # No store URLs
+
+        # Track what ProxyConfig was created with
+        mock_config_instance = Mock()
+        mock_proxy_config_class.from_dict.return_value = mock_config_instance
+
+        config = {
+            'proxy': {
+                'mode': 'residential',  # CLI override - not web_scraper_api
+            },
+            'name': 'walmart',
+        }
+
+        session = Mock()
+        run(session, config, retailer='walmart')
+
+        # Should have called from_dict with config that respects the mode
+        assert mock_proxy_config_class.from_dict.called, "Should use ProxyConfig.from_dict"
+        call_args = mock_proxy_config_class.from_dict.call_args[0][0]
+        # For direct mode, Walmart should upgrade to web_scraper_api
+        # For residential mode, it should stay residential
+        assert call_args.get('mode') == 'residential', \
+            f"Expected 'residential' mode from config, got: {call_args}"
+
+    @patch('src.scrapers.walmart.URLCache')
+    @patch('src.scrapers.walmart.get_store_urls_from_sitemap')
+    @patch('src.scrapers.walmart.ProxyClient')
+    @patch('src.scrapers.walmart.ProxyConfig')
+    def test_direct_mode_upgrades_to_web_scraper_api(
+        self, mock_proxy_config_class, mock_proxy_client, mock_get_urls, mock_cache_class
+    ):
+        """Direct mode should be upgraded to web_scraper_api for Walmart (requires JS)."""
+        mock_cache = Mock()
+        mock_cache.get.return_value = []
+        mock_cache_class.return_value = mock_cache
+        mock_get_urls.return_value = []
+
+        mock_config_instance = Mock()
+        mock_proxy_config_class.from_dict.return_value = mock_config_instance
+
+        config = {
+            'proxy': {
+                'mode': 'direct',  # Should be upgraded
+            },
+            'name': 'walmart',
+        }
+
+        session = Mock()
+        run(session, config, retailer='walmart')
+
+        # Direct mode should be upgraded to web_scraper_api
+        assert mock_proxy_config_class.from_dict.called
+        call_args = mock_proxy_config_class.from_dict.call_args[0][0]
+        assert call_args.get('mode') == 'web_scraper_api', \
+            f"Direct mode should upgrade to web_scraper_api, got: {call_args}"
+        assert call_args.get('render_js') is True, \
+            "Should enable render_js for web_scraper_api"
