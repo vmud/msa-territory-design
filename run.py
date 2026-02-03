@@ -563,6 +563,11 @@ async def run_all_retailers(
     summary = {}
     for retailer, result in zip(retailers, results):
         if isinstance(result, Exception):
+            # Log full traceback for debugging (#145)
+            import traceback
+            tb_str = ''.join(traceback.format_exception(type(result), result, result.__traceback__))
+            logging.error(f"[{retailer}] Scraper failed with exception:\n{tb_str}")
+
             summary[retailer] = {
                 'status': 'error',
                 'error': str(result)
