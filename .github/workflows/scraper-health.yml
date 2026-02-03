@@ -16,6 +16,9 @@ jobs:
     name: Test Scraper Endpoints
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write
 
     steps:
       - uses: actions/checkout@v4
