@@ -47,7 +47,6 @@ disable=
     too-many-public-methods,
     f-string-without-interpolation,
     reimported,
-    too-many-positional-arguments,
     anomalous-backslash-in-string
 
 [BASIC]
