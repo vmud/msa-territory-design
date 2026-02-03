@@ -567,11 +567,18 @@ class TestFormulaInjectionProtection:
             # Load the Excel file and verify sanitization
             wb = load_workbook(output_path)
             ws = wb.active
-            
-            # Row 1 is headers, row 2 is data
-            assert ws['B2'].value == "'=1+1"  # name column
-            assert ws['C2'].value == "'+dangerous"  # address column
-            assert ws['D2'].value == "'@SUM(A1:A10)"  # phone column
+
+            # Build column header map (fieldnames are sorted alphabetically)
+            headers = {ws.cell(row=1, column=col).value: col for col in range(1, ws.max_column + 1)}
+
+            # Verify sanitization by column name, not position
+            name_col = headers['name']
+            address_col = headers['address']
+            phone_col = headers['phone']
+
+            assert ws.cell(row=2, column=name_col).value == "'=1+1"  # name column
+            assert ws.cell(row=2, column=address_col).value == "'+dangerous"  # address column
+            assert ws.cell(row=2, column=phone_col).value == "'@SUM(A1:A10)"  # phone column
         finally:
             if os.path.exists(output_path):
                 os.unlink(output_path)
