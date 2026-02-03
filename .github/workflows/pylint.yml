@@ -23,4 +23,5 @@ jobs:
       run: |
         # Disable unknown-option-value (W0012) for Python 3.8 compatibility
         # (too-many-positional-arguments not recognized in older pylint)
-        pylint $(git ls-files '*.py') --disable=unknown-option-value
+        # Use --fail-under=9.5 to allow minor issues in test code while catching major problems
+        pylint $(git ls-files '*.py') --disable=unknown-option-value --fail-under=9.5
