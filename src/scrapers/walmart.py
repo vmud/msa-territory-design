@@ -433,18 +433,29 @@ def run(session, config: dict, **kwargs) -> dict:
         reset_request_counter()
 
         # Auto-select delays based on proxy mode for optimal performance
-        proxy_mode = config.get('proxy', {}).get('mode', 'direct')
+        proxy_config_dict = config.get('proxy', {})
+        proxy_mode = proxy_config_dict.get('mode', 'direct')
         min_delay, max_delay = utils.select_delays(config, proxy_mode)
-        logging.info(f"[{retailer_name}] HYBRID MODE: Using residential for sitemaps, web_scraper_api for stores")
-        logging.info(f"[{retailer_name}] Sitemap delays: {min_delay:.1f}-{max_delay:.1f}s (mode: {proxy_mode})")
 
-        # Create web_scraper_api client for store extraction
-        logging.info(f"[{retailer_name}] Creating web_scraper_api client for store extraction")
-        proxy_config = ProxyConfig.from_env()
-        proxy_config.mode = ProxyMode.WEB_SCRAPER_API
-        proxy_config.render_js = True
+        # Use proxy config from passed config (respects CLI/YAML overrides) (#149)
+        # Default to web_scraper_api with render_js for Walmart if not specified
+        store_proxy_config = dict(proxy_config_dict)  # Copy to avoid mutation
+        if proxy_mode == 'direct':
+            # Walmart requires JS rendering, upgrade to web_scraper_api if direct
+            logging.info(f"[{retailer_name}] Walmart requires JS rendering, upgrading to web_scraper_api")
+            store_proxy_config['mode'] = 'web_scraper_api'
+            store_proxy_config.setdefault('render_js', True)
+        elif proxy_mode == 'web_scraper_api':
+            # Ensure render_js is enabled for web_scraper_api (unless explicitly disabled)
+            store_proxy_config.setdefault('render_js', True)
+        # For residential mode, keep as-is (user explicitly chose it)
+
+        logging.info(f"[{retailer_name}] Store extraction proxy mode: {store_proxy_config.get('mode')}, render_js: {store_proxy_config.get('render_js')}")
+        logging.info(f"[{retailer_name}] Sitemap delays: {min_delay:.1f}-{max_delay:.1f}s")
+
+        # Create store client using config-based proxy settings (#149)
+        proxy_config = ProxyConfig.from_dict(store_proxy_config)
         store_client = ProxyClient(proxy_config)
-        logging.info(f"[{retailer_name}] Web Scraper API client ready (render_js=true)")
 
         checkpoint_path = f"data/{retailer_name}/checkpoints/scrape_progress.json"
         checkpoint_interval = config.get('checkpoint_interval', 100)

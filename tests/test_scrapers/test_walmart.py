@@ -261,28 +261,37 @@ class TestWalmartRun:
         return response
 
     def _make_store_page_response(self, store_id):
-        """Helper to create store page with __NEXT_DATA__."""
+        """Helper to create store page with __NEXT_DATA__.
+
+        Walmart expects: props.pageProps.initialData.initialDataNodeDetail.data.nodeDetail
+        """
         next_data = {
             "props": {
                 "pageProps": {
-                    "store": {
-                        "id": str(store_id),
-                        "name": "Walmart Supercenter",
-                        "displayName": f"Walmart Store {store_id}",
-                        "phoneNumber": "(555) 123-4567",
-                        "address": {
-                            "addressLineOne": f"{store_id} Main St",
-                            "city": "Test City",
-                            "state": "TX",
-                            "postalCode": "75001",
-                            "country": "US"
-                        },
-                        "geoPoint": {
-                            "latitude": 32.7767,
-                            "longitude": -96.7970
-                        },
-                        "capabilities": ["Pharmacy", "Garden Center"],
-                        "isGlassEligible": True
+                    "initialData": {
+                        "initialDataNodeDetail": {
+                            "data": {
+                                "nodeDetail": {
+                                    "id": str(store_id),
+                                    "name": "Walmart Supercenter",
+                                    "displayName": f"Walmart Store {store_id}",
+                                    "phoneNumber": "(555) 123-4567",
+                                    "address": {
+                                        "addressLineOne": f"{store_id} Main St",
+                                        "city": "Test City",
+                                        "state": "TX",
+                                        "postalCode": "75001",
+                                        "country": "US"
+                                    },
+                                    "geoPoint": {
+                                        "latitude": 32.7767,
+                                        "longitude": -96.7970
+                                    },
+                                    "capabilities": ["Pharmacy", "Garden Center"],
+                                    "isGlassEligible": True
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -322,6 +331,7 @@ class TestWalmartRun:
         assert isinstance(result['count'], int)
         assert isinstance(result['checkpoints_used'], bool)
 
+    @patch('src.scrapers.walmart.ProxyClient')
     @patch('src.scrapers.walmart._cache_response')
     @patch('src.scrapers.walmart._get_cached_response', return_value=None)
     @patch('src.scrapers.walmart.URLCache')
@@ -329,17 +339,25 @@ class TestWalmartRun:
     @patch('src.scrapers.walmart.utils.get_with_retry')
     @patch('src.scrapers.walmart._request_counter')
     def test_run_with_limit(self, mock_counter, mock_get, mock_config,
-                            mock_cache_class, mock_get_resp, mock_cache_resp, mock_session):
+                            mock_cache_class, mock_get_resp, mock_cache_resp,
+                            mock_proxy_client, mock_session):
         """Test run() respects limit parameter."""
         mock_config.SITEMAP_URLS = ['https://test.com/sitemap.xml']
         mock_cache = Mock()
         mock_cache.get.return_value = None
         mock_cache_class.return_value = mock_cache
-        mock_get.side_effect = [
-            self._make_sitemap_response([1234, 1235, 1236, 1237, 1238]),
-            self._make_store_page_response(1234),
-            self._make_store_page_response(1235),
-        ]
+
+        # Mock ProxyClient to return store page responses
+        mock_client_instance = Mock()
+        response1 = self._make_store_page_response(1234)
+        response1.status_code = 200
+        response2 = self._make_store_page_response(1235)
+        response2.status_code = 200
+        mock_client_instance.get.side_effect = [response1, response2]
+        mock_proxy_client.return_value = mock_client_instance
+
+        # mock_get is only used for sitemap fetching
+        mock_get.return_value = self._make_sitemap_response([1234, 1235, 1236, 1237, 1238])
 
         result = run(mock_session, {'checkpoint_interval': 100}, retailer='walmart', limit=2)
 
@@ -715,3 +733,79 @@ class TestWalmartFailedUrlTracking:
 
         assert result['count'] == 0  # No stores extracted
         # Failed URLs should have been logged
+
+
+class TestWalmartProxyOverride:
+    """Tests for proxy override handling (#149)."""
+
+    @patch('src.scrapers.walmart.URLCache')
+    @patch('src.scrapers.walmart.get_store_urls_from_sitemap')
+    @patch('src.scrapers.walmart.ProxyClient')
+    @patch('src.scrapers.walmart.ProxyConfig')
+    def test_run_respects_cli_proxy_override(
+        self, mock_proxy_config_class, _mock_proxy_client, mock_get_urls, mock_cache_class
+    ):
+        """run() should use proxy config from passed config dict, not hardcoded."""
+        from src.shared.proxy_client import ProxyMode
+
+        # Set up mocks
+        mock_cache = Mock()
+        mock_cache.get.return_value = []  # No cached URLs
+        mock_cache_class.return_value = mock_cache
+        mock_get_urls.return_value = []  # No store URLs
+
+        # Track what ProxyConfig was created with
+        mock_config_instance = Mock()
+        mock_proxy_config_class.from_dict.return_value = mock_config_instance
+
+        config = {
+            'proxy': {
+                'mode': 'residential',  # CLI override - not web_scraper_api
+            },
+            'name': 'walmart',
+        }
+
+        session = Mock()
+        run(session, config, retailer='walmart')
+
+        # Should have called from_dict with config that respects the mode
+        assert mock_proxy_config_class.from_dict.called, "Should use ProxyConfig.from_dict"
+        call_args = mock_proxy_config_class.from_dict.call_args[0][0]
+        # For direct mode, Walmart should upgrade to web_scraper_api
+        # For residential mode, it should stay residential
+        assert call_args.get('mode') == 'residential', \
+            f"Expected 'residential' mode from config, got: {call_args}"
+
+    @patch('src.scrapers.walmart.URLCache')
+    @patch('src.scrapers.walmart.get_store_urls_from_sitemap')
+    @patch('src.scrapers.walmart.ProxyClient')
+    @patch('src.scrapers.walmart.ProxyConfig')
+    def test_direct_mode_upgrades_to_web_scraper_api(
+        self, mock_proxy_config_class, _mock_proxy_client, mock_get_urls, mock_cache_class
+    ):
+        """Direct mode should be upgraded to web_scraper_api for Walmart (requires JS)."""
+        mock_cache = Mock()
+        mock_cache.get.return_value = []
+        mock_cache_class.return_value = mock_cache
+        mock_get_urls.return_value = []
+
+        mock_config_instance = Mock()
+        mock_proxy_config_class.from_dict.return_value = mock_config_instance
+
+        config = {
+            'proxy': {
+                'mode': 'direct',  # Should be upgraded
+            },
+            'name': 'walmart',
+        }
+
+        session = Mock()
+        run(session, config, retailer='walmart')
+
+        # Direct mode should be upgraded to web_scraper_api
+        assert mock_proxy_config_class.from_dict.called
+        call_args = mock_proxy_config_class.from_dict.call_args[0][0]
+        assert call_args.get('mode') == 'web_scraper_api', \
+            f"Direct mode should upgrade to web_scraper_api, got: {call_args}"
+        assert call_args.get('render_js') is True, \
+            "Should enable render_js for web_scraper_api"

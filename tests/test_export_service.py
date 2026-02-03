@@ -567,11 +567,18 @@ class TestFormulaInjectionProtection:
             # Load the Excel file and verify sanitization
             wb = load_workbook(output_path)
             ws = wb.active
-            
-            # Row 1 is headers, row 2 is data
-            assert ws['B2'].value == "'=1+1"  # name column
-            assert ws['C2'].value == "'+dangerous"  # address column
-            assert ws['D2'].value == "'@SUM(A1:A10)"  # phone column
+
+            # Build column header map (fieldnames are sorted alphabetically)
+            headers = {ws.cell(row=1, column=col).value: col for col in range(1, ws.max_column + 1)}
+
+            # Verify sanitization by column name, not position
+            name_col = headers['name']
+            address_col = headers['address']
+            phone_col = headers['phone']
+
+            assert ws.cell(row=2, column=name_col).value == "'=1+1"  # name column
+            assert ws.cell(row=2, column=address_col).value == "'+dangerous"  # address column
+            assert ws.cell(row=2, column=phone_col).value == "'@SUM(A1:A10)"  # phone column
         finally:
             if os.path.exists(output_path):
                 os.unlink(output_path)
@@ -619,3 +626,63 @@ class TestFormulaInjectionProtection:
         
         assert ws['A2'].value == "'=MALICIOUS()"
         assert ws['B2'].value == "'-evil"
+
+
+class TestFieldnameUnion:
+    """Tests for fieldname union across stores (#146)."""
+
+    def test_fieldnames_include_all_unique_fields_across_stores(self):
+        """Fieldnames should be union of fields from first N stores, not just first store."""
+        stores = [
+            {'name': 'Store 1', 'city': 'NYC'},
+            {'name': 'Store 2', 'city': 'LA', 'extra_field': 'value'},
+            {'name': 'Store 3', 'city': 'Chicago', 'another_field': 'data'},
+        ]
+
+        fieldnames = ExportService._get_fieldnames(stores, None)
+
+        # Should include fields from all stores
+        assert 'extra_field' in fieldnames, "Missing 'extra_field' from store 2"
+        assert 'another_field' in fieldnames, "Missing 'another_field' from store 3"
+
+    def test_fieldnames_deterministic_order(self):
+        """Fieldnames should have deterministic order (sorted)."""
+        stores = [
+            {'zebra': 1, 'alpha': 2},
+            {'beta': 3, 'gamma': 4},
+        ]
+
+        fieldnames1 = ExportService._get_fieldnames(stores, None)
+        fieldnames2 = ExportService._get_fieldnames(stores, None)
+
+        assert fieldnames1 == fieldnames2, "Fieldnames should be deterministic"
+        assert fieldnames1 == sorted(fieldnames1), "Fieldnames should be sorted"
+
+    def test_fieldnames_bounded_sample_size(self):
+        """Should sample bounded number of stores (not all) for performance."""
+        # Create 200 stores, field at index 50 should be caught
+        stores_with_early_field = [{'name': f'Store {i}'} for i in range(200)]
+        stores_with_early_field[50]['early_field'] = 'exists'
+
+        fieldnames_early = ExportService._get_fieldnames(stores_with_early_field, None)
+        assert 'early_field' in fieldnames_early
+
+    def test_csv_export_includes_all_fields(self, tmp_path):
+        """CSV export should include columns for all fields across stores."""
+        import csv
+
+        stores = [
+            {'name': 'Store 1', 'city': 'NYC'},
+            {'name': 'Store 2', 'city': 'LA', 'phone': '555-1234'},
+        ]
+
+        output_path = tmp_path / "test.csv"
+        ExportService.export_stores(stores, ExportFormat.CSV, str(output_path), None)
+
+        with open(output_path, 'r') as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+
+        # Phone column should exist even though first store doesn't have it
+        assert 'phone' in reader.fieldnames
+        assert rows[1]['phone'] == '555-1234'
