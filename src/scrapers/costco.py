@@ -236,6 +236,7 @@ def _normalize_warehouse_json(data: Dict[str, Any]) -> Dict[str, Any]:
         falsy values (e.g., 0.0) while still falling back on null JSON values.
     """
     def _coalesce_none(*values: Any) -> Any:
+        """Return first value that is not None (preserves valid 0 coordinates)."""
         for value in values:
             if value is not None:
                 return value
