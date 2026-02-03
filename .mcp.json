@@ -1,0 +1,15 @@
+{
+  "$schema": "https://raw.githubusercontent.com/anthropics/claude-code/main/schemas/mcp.schema.json",
+  "servers": {
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@context7/mcp"],
+      "description": "Live documentation lookup for libraries (requests, BeautifulSoup, google-cloud-storage, pytest, aiohttp)"
+    },
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-memory"],
+      "description": "Cross-session context persistence for retailer quirks, API changes, and debugging insights"
+    }
+  }
+}
