@@ -110,7 +110,12 @@
       "mcp__plugin_github_github__pull_request_read",
       "mcp__plugin_github_github__list_pull_requests",
       "Bash(gh repo view:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(gh workflow:*)",
+      "Bash(gh run list:*)",
+      "Bash(column:*)",
+      "Bash(gh api:*)",
+      "Skill(commit-commands:commit)"
     ]
   },
   "hooks": {
@@ -127,6 +132,23 @@
       }
     ],
     "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/format-on-edit.sh",
+            "statusMessage": "Auto-formatting...",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/type-check.sh",
+            "statusMessage": "Type checking...",
+            "async": true
+          }
+        ]
+      },
       {
         "matcher": "Edit",
         "hooks": [
