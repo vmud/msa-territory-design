@@ -28,13 +28,12 @@ jobs:
       - name: Install Bandit
         run: pip install bandit[toml]
 
-      - name: Run Bandit
+      - name: Run Bandit on src/
         run: |
-          bandit -r src/ run.py \
-            -ll \
-            -f json \
-            -o bandit-report.json \
-            --exit-zero
+          bandit -r src/ -ll -f json -o bandit-report-src.json --exit-zero
+      - name: Run Bandit on run.py
+        run: |
+          bandit run.py -ll -f json -o bandit-report-run.json --exit-zero
 
       - name: Upload Bandit Report
         uses: actions/upload-artifact@v4
