@@ -21,6 +21,38 @@ from src.shared.proxy_client import ProxyClient, ProxyConfig, ProxyMode, ProxyRe
 # Import centralized constants (Issue #171)
 from src.shared.constants import HTTP, LOGGING, VALIDATION
 
+__all__ = [
+    'DEFAULT_MAX_DELAY',
+    'DEFAULT_MAX_RETRIES',
+    'DEFAULT_MIN_DELAY',
+    'DEFAULT_RATE_LIMIT_BASE_WAIT',
+    'DEFAULT_TIMEOUT',
+    'DEFAULT_USER_AGENTS',
+    'ProxiedSession',
+    'RECOMMENDED_STORE_FIELDS',
+    'REQUIRED_STORE_FIELDS',
+    'ValidationResult',
+    'close_all_proxy_clients',
+    'close_proxy_client',
+    'create_proxied_session',
+    'get_headers',
+    'get_proxy_client',
+    'get_retailer_proxy_config',
+    'get_with_proxy',
+    'get_with_retry',
+    'init_proxy_from_yaml',
+    'load_checkpoint',
+    'load_retailer_config',
+    'random_delay',
+    'save_checkpoint',
+    'save_to_csv',
+    'save_to_json',
+    'select_delays',
+    'setup_logging',
+    'validate_store_data',
+    'validate_stores_batch',
+]
+
 
 # Default configuration values - backward compatible aliases to centralized constants
 # These can be overridden per-retailer in config/retailers.yaml

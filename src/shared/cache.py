@@ -13,6 +13,13 @@ from typing import List, Optional, Dict, Any
 from src.shared.constants import CACHE
 
 
+__all__ = [
+    'DEFAULT_CACHE_EXPIRY_DAYS',
+    'RichURLCache',
+    'URLCache',
+]
+
+
 # Default cache expiry: 7 days (stores don't change location frequently)
 DEFAULT_CACHE_EXPIRY_DAYS = CACHE.URL_CACHE_EXPIRY_DAYS
 

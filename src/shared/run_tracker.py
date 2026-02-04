@@ -8,6 +8,15 @@ from .utils import save_checkpoint, load_checkpoint
 from src.shared.constants import RUN_HISTORY
 
 
+__all__ = [
+    'RunTracker',
+    'cleanup_old_runs',
+    'get_active_run',
+    'get_latest_run',
+    'get_run_history',
+]
+
+
 class RunTracker:
     """Track metadata for scraping runs"""
     
