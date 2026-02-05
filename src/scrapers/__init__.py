@@ -2,7 +2,8 @@
 
 import logging
 from pathlib import Path
-from typing import Dict, List
+from types import ModuleType
+from typing import Any, Dict, List
 
 import yaml
 
@@ -55,7 +56,7 @@ def get_enabled_retailers() -> List[str]:
     ]
 
 
-def get_scraper_module(retailer: str):
+def get_scraper_module(retailer: str) -> ModuleType:
     """Dynamically import and return a scraper module"""
     import importlib
     if retailer not in SCRAPER_REGISTRY:
