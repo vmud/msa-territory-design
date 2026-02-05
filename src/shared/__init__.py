@@ -26,6 +26,8 @@ from .utils import (
     # Per-retailer proxy configuration
     get_retailer_proxy_config,
     load_retailer_config,
+    # Concurrency configuration
+    configure_concurrency_from_yaml,
 )
 
 from .proxy_client import (
@@ -71,6 +73,11 @@ from .cache_interface import (
 
 from .session_factory import (
     create_session_factory,
+)
+
+from .concurrency import (
+    GlobalConcurrencyManager,
+    ConcurrencyConfig,
 )
 
 from .store_serializer import (
@@ -129,6 +136,8 @@ __all__ = [
     # Per-retailer proxy configuration
     'get_retailer_proxy_config',
     'load_retailer_config',
+    # Concurrency configuration
+    'configure_concurrency_from_yaml',
     # Scraper management
     'ScraperManager',
     'get_scraper_manager',
@@ -154,6 +163,9 @@ __all__ = [
     'ResponseCache',
     # Session factory
     'create_session_factory',
+    # Concurrency management
+    'GlobalConcurrencyManager',
+    'ConcurrencyConfig',
     # Store schema and serialization
     'Store',
     'StoreSerializer',
