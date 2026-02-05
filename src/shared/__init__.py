@@ -73,6 +73,12 @@ from .session_factory import (
     create_session_factory,
 )
 
+from .store_serializer import (
+    Store,
+    StoreSerializer,
+    normalize_store_dict,
+)
+
 from .structured_logging import (
     LogEvent,
     EventType,
@@ -81,7 +87,6 @@ from .structured_logging import (
     MetricsAggregator,
     create_logger,
 )
-
 from .sentry_integration import (
     init_sentry,
     capture_scraper_error,
@@ -149,6 +154,10 @@ __all__ = [
     'ResponseCache',
     # Session factory
     'create_session_factory',
+    # Store schema and serialization
+    'Store',
+    'StoreSerializer',
+    'normalize_store_dict',
     # Structured logging and metrics
     'LogEvent',
     'EventType',
