@@ -382,6 +382,10 @@ Deployment tools in `deploy/`:
 - `validate.sh` - deployment validation checks
 - `diagnose-network.sh` - network troubleshooting utilities
 
+## Session Scope
+
+When asked to explore or set up something, focus narrowly on the specific task before broadening exploration. Do not spend a session exploring the codebase without taking concrete action toward the goal. Front-load actionable steps — complete at least one deliverable before doing broad discovery.
+
 ## Implementation Standards
 
 When implementing features from design plans, create all modules with corresponding test files and ensure CLI is functional before marking complete.
@@ -393,6 +397,11 @@ For configuration/setup tasks (MCP, credentials, integrations), always verify th
 ## Code Review
 
 When doing code reviews, create a structured review checklist and document findings in a markdown file before discussing with user.
+
+When resolving code review comments across PRs:
+- Use parallel task agents to handle multiple PRs simultaneously
+- After fixing code, mark GitHub review comment threads as resolved using the GitHub CLI (`gh api repos/{owner}/{repo}/pulls/{pr}/comments/{comment_id}/replies`)
+- Always confirm with user whether to push changes and resolve threads, or just prepare commits
 
 ## Code Style
 
@@ -484,7 +493,12 @@ pre-commit run detect-secrets --all-files
 
 ## 1Password / Credentials
 
-When working with 1Password CLI or service account tokens, remember that environment variables may not inherit properly in subprocesses, GUI apps, or LaunchAgents. Check `OP_SERVICE_ACCOUNT_TOKEN` availability in the execution context first.
+When working with 1Password CLI or service account tokens:
+- Environment variables set in shell profiles may not be inherited by GUI apps or LaunchAgents
+- Use `launchctl setenv` or LaunchAgent plists to set system-wide env vars like `OP_SERVICE_ACCOUNT_TOKEN`
+- Always verify token availability in subprocess contexts with `env | grep OP_`
+- Check `~/.config/op/config` and 1Password desktop integration settings before modifying auth flows
+- MCP servers need the env var inherited in their subprocess — check the parent process (Claude, terminal, LaunchAgent) passes variables correctly
 
 ## Debugging Tips
 
