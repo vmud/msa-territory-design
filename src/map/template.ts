@@ -15,20 +15,32 @@ interface StorePoint {
   msa_name: string | null;
 }
 
+/** Escape JSON for safe embedding inside <script> blocks (prevents </script> breakout). */
+function safeJsonEmbed(data: unknown): string {
+  return JSON.stringify(data).replace(/<\//g, "<\\/");
+}
+
 export function buildHtml(msas: MsaFeature[], stores: StorePoint[]): string {
   // Build GeoJSON FeatureCollection for MSA polygons
-  const msaFeatures = msas.map((m) => {
-    const geometry = JSON.parse(m.geojson);
-    return {
-      type: "Feature" as const,
-      properties: {
-        cbsafp: m.cbsafp,
-        name: m.name,
-        store_count: m.store_count,
-      },
-      geometry,
-    };
-  });
+  const msaFeatures = msas
+    .map((m) => {
+      try {
+        const geometry = JSON.parse(m.geojson);
+        return {
+          type: "Feature" as const,
+          properties: {
+            cbsafp: m.cbsafp,
+            name: m.name,
+            store_count: m.store_count,
+          },
+          geometry,
+        };
+      } catch {
+        console.error(`Invalid GeoJSON for MSA ${m.cbsafp}, skipping`);
+        return null;
+      }
+    })
+    .filter((f) => f !== null);
 
   const msaCollection = {
     type: "FeatureCollection",
@@ -41,8 +53,12 @@ export function buildHtml(msas: MsaFeature[], stores: StorePoint[]): string {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Walmart Stores &times; MSA Boundaries</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin="anonymous" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin="anonymous"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     #map { width: 100vw; height: 100vh; }
@@ -78,7 +94,14 @@ export function buildHtml(msas: MsaFeature[], stores: StorePoint[]): string {
   </div>
 
   <script>
-    const map = L.map('map').setView([39.5, -98.5], 5);
+    // HTML escape helper to prevent XSS from data values
+    function esc(text) {
+      var d = document.createElement('div');
+      d.textContent = text;
+      return d.innerHTML;
+    }
+
+    var map = L.map('map').setView([39.5, -98.5], 5);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors',
@@ -86,9 +109,9 @@ export function buildHtml(msas: MsaFeature[], stores: StorePoint[]): string {
     }).addTo(map);
 
     // MSA polygons
-    const msaData = ${JSON.stringify(msaCollection)};
+    var msaData = ${safeJsonEmbed(msaCollection)};
 
-    const msaLayer = L.geoJSON(msaData, {
+    var msaLayer = L.geoJSON(msaData, {
       style: {
         color: '#3388ff',
         weight: 1,
@@ -99,7 +122,7 @@ export function buildHtml(msas: MsaFeature[], stores: StorePoint[]): string {
         layer.on('mouseover', function(e) {
           e.target.setStyle({ fillOpacity: 0.25, weight: 2 });
           document.getElementById('hover-info').innerHTML =
-            '<strong>' + feature.properties.name + '</strong><br/>' +
+            '<strong>' + esc(feature.properties.name) + '</strong><br/>' +
             feature.properties.store_count + ' stores in this MSA';
         });
         layer.on('mouseout', function(e) {
@@ -110,10 +133,10 @@ export function buildHtml(msas: MsaFeature[], stores: StorePoint[]): string {
     }).addTo(map);
 
     // Store markers
-    const storeData = ${JSON.stringify(stores)};
+    var storeData = ${safeJsonEmbed(stores)};
 
     storeData.forEach(function(s) {
-      const inMsa = s.msa_name !== null;
+      var inMsa = s.msa_name !== null;
       L.circleMarker([s.latitude, s.longitude], {
         radius: 4,
         color: inMsa ? '#0066cc' : '#cc3300',
@@ -122,9 +145,9 @@ export function buildHtml(msas: MsaFeature[], stores: StorePoint[]): string {
         weight: 1,
       })
       .bindPopup(
-        '<strong>' + s.name + '</strong><br/>' +
-        s.city + ', ' + s.state + '<br/>' +
-        (inMsa ? 'MSA: ' + s.msa_name : '<em>Outside MSA</em>')
+        '<strong>' + esc(s.name) + '</strong><br/>' +
+        esc(s.city) + ', ' + esc(s.state) + '<br/>' +
+        (inMsa ? 'MSA: ' + esc(s.msa_name) : '<em>Outside MSA</em>')
       )
       .addTo(map);
     });

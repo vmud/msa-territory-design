@@ -36,7 +36,7 @@ export const STATUS_QUERY = `
 
 export const MSA_GEOJSON = `
   SELECT m.cbsafp, m.name, COUNT(s.store_id) AS store_count,
-         ST_AsGeoJSON(ST_Simplify(m.geom, 0.01)) AS geojson
+         ST_AsGeoJSON(ST_SimplifyPreserveTopology(m.geom, 0.01)) AS geojson
   FROM msa_boundaries m
   LEFT JOIN stores s ON s.msa_id = m.gid
   WHERE m.lsad = 'M1'

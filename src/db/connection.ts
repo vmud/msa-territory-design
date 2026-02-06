@@ -5,7 +5,13 @@ let pool: pg.Pool | null = null;
 
 export function getPool(): pg.Pool {
   if (!pool) {
-    pool = new pg.Pool({ connectionString: config.databaseUrl });
+    const poolConfig = config.databaseUrl
+      ? { connectionString: config.databaseUrl }
+      : config.dbConfig;
+    pool = new pg.Pool(poolConfig);
+    pool.on("error", (err) => {
+      console.error("Unexpected database pool error:", err.message);
+    });
   }
   return pool;
 }

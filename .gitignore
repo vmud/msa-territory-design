@@ -6,6 +6,13 @@ dist/
 
 # Environment
 .env
+.env.local
+.env.*.local
+
+# Secrets / certificates
+*.pem
+*.key
+*.crt
 
 # Data files (large, downloaded separately)
 data/shapefiles/

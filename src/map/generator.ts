@@ -16,6 +16,10 @@ export async function exportMap(outputPath?: string): Promise<string> {
   const storeResult = await pool.query(STORE_POINTS);
   console.log(`  ${storeResult.rows.length} stores`);
 
+  if (msaResult.rows.length === 0 && storeResult.rows.length === 0) {
+    console.warn("Warning: No data to display. Run import commands first.");
+  }
+
   const msas = msaResult.rows.map((r) => ({
     cbsafp: r.cbsafp,
     name: r.name,
