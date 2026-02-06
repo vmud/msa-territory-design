@@ -1,0 +1,45 @@
+name: Security Scan
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+jobs:
+  npm-audit:
+    name: npm Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Run npm audit
+        run: npm audit --audit-level=high
+
+      - name: Check for known vulnerabilities
+        run: |
+          echo "## npm Audit Report" >> $GITHUB_STEP_SUMMARY
+          npm audit --json | jq -r '.vulnerabilities | to_entries[] | "- \(.key): \(.value.severity)"' >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "No vulnerabilities found" >> $GITHUB_STEP_SUMMARY
+
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
