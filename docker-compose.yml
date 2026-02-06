@@ -1,148 +1,22 @@
 services:
-  # Main scraper service
-  scraper:
-    build: .
-    container_name: retail-scraper
-    # Container stays running but doesn't auto-start scraping
-    # Start manually via dashboard or: docker compose exec scraper python run.py --all
-    command: ["tail", "-f", "/dev/null"]
-    volumes:
-      # Note: If using bind mounts with existing directories, ensure ownership is 1000:1000
-      # Run: chown -R 1000:1000 ./data ./logs (or run container as root once to fix)
-      - ./data:/app/data
-      - ./logs:/app/logs
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: territory-postgis
     environment:
-      - LOG_LEVEL=INFO
-      - PYTHONUNBUFFERED=1
-      # Oxylabs proxy credentials (optional)
-      # Set these for proxy mode, or use --proxy direct for no proxy
-      #
-      # Residential Proxy credentials
-      - OXYLABS_RESIDENTIAL_USERNAME=${OXYLABS_RESIDENTIAL_USERNAME:-}
-      - OXYLABS_RESIDENTIAL_PASSWORD=${OXYLABS_RESIDENTIAL_PASSWORD:-}
-      # Web Scraper API credentials
-      - OXYLABS_SCRAPER_API_USERNAME=${OXYLABS_SCRAPER_API_USERNAME:-}
-      - OXYLABS_SCRAPER_API_PASSWORD=${OXYLABS_SCRAPER_API_PASSWORD:-}
-      # Legacy/fallback credentials (used if mode-specific not set)
-      - OXYLABS_USERNAME=${OXYLABS_USERNAME:-}
-      - OXYLABS_PASSWORD=${OXYLABS_PASSWORD:-}
-      # Proxy mode: direct, residential, web_scraper_api
-      - PROXY_MODE=${PROXY_MODE:-direct}
-    restart: unless-stopped
-    # Override command for different modes:
-    # docker-compose run scraper python run.py --retailer verizon
-    # docker-compose run scraper python run.py --all --test --limit 10
-    # docker-compose run scraper python run.py --all --proxy residential
-
-  # Dashboard service for monitoring
-  dashboard:
-    build: .
-    container_name: retail-scraper-dashboard
-    # Default command (python dashboard/app.py) is set in Dockerfile
+      POSTGRES_DB: territory_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
     ports:
-      # Dashboard listens on port 5001 (#105)
-      - "5001:5001"
+      - "5432:5432"
     volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
-    environment:
-      - FLASK_ENV=production
-      - PYTHONUNBUFFERED=1
-      # Flask secret for sessions
-      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY:-}
-      # Optional API key for authentication (#92)
-      - DASHBOARD_API_KEY=${DASHBOARD_API_KEY:-}
-      # Proxy credentials (for dashboard to start scrapers)
-      - OXYLABS_RESIDENTIAL_USERNAME=${OXYLABS_RESIDENTIAL_USERNAME:-}
-      - OXYLABS_RESIDENTIAL_PASSWORD=${OXYLABS_RESIDENTIAL_PASSWORD:-}
-      - OXYLABS_SCRAPER_API_USERNAME=${OXYLABS_SCRAPER_API_USERNAME:-}
-      - OXYLABS_SCRAPER_API_PASSWORD=${OXYLABS_SCRAPER_API_PASSWORD:-}
-      - OXYLABS_USERNAME=${OXYLABS_USERNAME:-}
-      - OXYLABS_PASSWORD=${OXYLABS_PASSWORD:-}
-      - PROXY_MODE=${PROXY_MODE:-direct}
-    restart: unless-stopped
-    # Removed depends_on: scraper - dashboard can run independently (#105)
-    # Health check for dashboard service (#115)
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d
+      - ./data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5001/api/status"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-
-  # Single retailer services (optional, for running specific retailers)
-  verizon:
-    build: .
-    container_name: retail-scraper-verizon
-    command: python run.py --retailer verizon --resume
-    volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
-    environment:
-      - LOG_LEVEL=INFO
-    profiles:
-      - retailers
-
-  att:
-    build: .
-    container_name: retail-scraper-att
-    command: python run.py --retailer att --resume
-    volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
-    environment:
-      - LOG_LEVEL=INFO
-    profiles:
-      - retailers
-
-  target:
-    build: .
-    container_name: retail-scraper-target
-    command: python run.py --retailer target --resume
-    volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
-    environment:
-      - LOG_LEVEL=INFO
-    profiles:
-      - retailers
-
-  tmobile:
-    build: .
-    container_name: retail-scraper-tmobile
-    command: python run.py --retailer tmobile --resume
-    volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
-    environment:
-      - LOG_LEVEL=INFO
-    profiles:
-      - retailers
-
-  walmart:
-    build: .
-    container_name: retail-scraper-walmart
-    command: python run.py --retailer walmart --resume
-    volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
-    environment:
-      - LOG_LEVEL=INFO
-    profiles:
-      - retailers
-
-  bestbuy:
-    build: .
-    container_name: retail-scraper-bestbuy
-    command: python run.py --retailer bestbuy --resume
-    volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
-    environment:
-      - LOG_LEVEL=INFO
-    profiles:
-      - retailers
+      test: ["CMD-SHELL", "pg_isready -U postgres -d territory_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
-  scraper-data:
-  scraper-logs:
+  pgdata:

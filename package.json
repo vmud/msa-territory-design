@@ -1,5 +1,29 @@
 {
+  "name": "msa-territory-design",
+  "version": "0.1.0",
+  "description": "MSA Territory Design POC - PostGIS spatial analysis for retail store territory mapping",
+  "type": "module",
+  "bin": {
+    "territory-design": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
   "dependencies": {
-    "@playwright/test": "^1.57.0"
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.11.10",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   }
 }
