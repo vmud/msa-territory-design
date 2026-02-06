@@ -27,12 +27,11 @@ jobs:
       - run: npm ci
 
       - name: Run npm audit
-        run: npm audit --audit-level=high
-
-      - name: Check for known vulnerabilities
         run: |
           echo "## npm Audit Report" >> $GITHUB_STEP_SUMMARY
-          npm audit --json | jq -r '.vulnerabilities | to_entries[] | "- \(.key): \(.value.severity)"' >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "No vulnerabilities found" >> $GITHUB_STEP_SUMMARY
+          npm audit --json > audit-results.json || true
+          jq -r '.vulnerabilities | to_entries[] | "- \(.key): \(.value.severity)"' audit-results.json >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "No vulnerabilities found" >> $GITHUB_STEP_SUMMARY
+          npm audit --audit-level=high
 
   dependency-review:
     name: Dependency Review
